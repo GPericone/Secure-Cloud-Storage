@@ -18,6 +18,41 @@ Funzioni di OPENSSL da utilizzare:
 // CERTIFICATI
 // --------------------------------------------------------------------------
 
+int load_certificate(std::string filename, X509 **certificate){
+    // converto la stringa filename in un array di caratteri, per poter usare fopen -> Altra soluzione uso fstream
+	FILE* fp = fopen(filename.c_str(), "r");
+	if(!fp)
+    {
+        std::cerr << "An error occurred while opening the file" << std::endl;
+		return -1;
+	}
+	*certificate = PEM_read_X509(fp, NULL, NULL, NULL);
+	if(!certificate)
+    {
+        std::cerr << "An error occurred while reading the certificate" << std::endl;
+		return -1;
+	}
+	fclose(fp);
+	return 0;
+}
+
+int load_crl(std::string filename, X509_CRL** crl){
+	FILE* fp = fopen(filename.c_str(), "r");
+	if(!fp)
+    {
+        std::cerr << "An error occurred while opening the file" << std::endl;
+		return -1;
+	}
+	*crl = PEM_read_X509_CRL(fp, NULL, NULL, NULL);
+	if(!crl)
+    {
+        std::cerr << "An error occurred while reading the CRL" << std::endl;
+		return -1;
+	}
+	fclose(fp);
+	return 0;
+}
+
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
 
