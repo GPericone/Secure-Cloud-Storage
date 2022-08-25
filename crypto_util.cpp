@@ -206,3 +206,75 @@ int aesgcm_encrypt(unsigned char *plaintext, int plaintext_len,
     return ciphertext_len;
 }
 
+int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
+                unsigned char *aad, int aad_len,
+                unsigned char *tag,
+                unsigned char *key,
+                unsigned char *iv, int iv_len,
+                unsigned char *plaintext)
+{
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int plaintext_len;
+    int ret;
+
+    /* Create and initialise the context */
+    ctx = EVP_CIPHER_CTX_new();
+
+    if(ctx == NULL)
+    {
+        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        return -1;
+    }
+
+    if(!EVP_DecryptInit(ctx, cipher, key, iv))
+    {
+        std::cerr << "An error occurred during the initialization of the decryption" << std::endl;
+        return -1;
+    }
+
+	//Provide any AAD data.
+    if(!EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len))
+    {
+        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        return -1;
+    }
+
+	//Provide the message to be decrypted, and obtain the plaintext output.
+    if(!EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
+    {
+        std::cerr << "An error occurred during the update of the decryption" << std::endl;
+        return -1;
+    }
+    
+    plaintext_len = len;
+
+    /* Set expected tag value. */
+    if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag))
+    {
+        std::cerr << "An error occurred while getting the tag" << std::endl;
+        return -1;
+    }
+    /*
+     * Finalise the decryption. A positive return value indicates success,
+     * anything else is a failure - the plaintext is not trustworthy.
+     */
+    ret = EVP_DecryptFinal(ctx, plaintext + len, &len);
+
+    /* Clean up */
+    EVP_CIPHER_CTX_free(ctx);
+
+    if(ret > 0) {
+        /* Success */
+        plaintext_len += len;
+        return plaintext_len;
+    } else {
+        /* Verify failed */
+        return -1;
+    }
+}
+
+// --------------------------------------------------------------------------
+// DIGITAL ENVELOPE
+// --------------------------------------------------------------------------
+
