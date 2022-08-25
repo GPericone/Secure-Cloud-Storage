@@ -3,14 +3,14 @@
 #include <openssl/x509_vfy.h>
 
 
+
 /*
 
 Funzioni di OPENSSL da utilizzare:
 
 - Gestione del certificato
-- Protocollo di scambio delle chiavi DH -> Serve? Possiamo fare attraverso lo scambio di certificati
 - Digital Envelope
-- Protocollo di autenticazione -> HMAC
+- AES-128 GCM
 
 */
 
@@ -136,11 +136,73 @@ int verify_certificate (X509_STORE *store, X509 *certificate){
     return 0;
 }
 
+// --------------------------------------------------------------------------
+// AES-128 GCM
+// --------------------------------------------------------------------------
 
+const EVP_CIPHER *cipher = EVP_aes_128_gcm();
 
+int aesgcm_encrypt(unsigned char *plaintext, int plaintext_len,
+                unsigned char *aad, int aad_len,
+                unsigned char *key,
+                unsigned char *iv, int iv_len,
+                unsigned char *ciphertext,
+                unsigned char *tag)
+{
+    EVP_CIPHER_CTX *ctx;
 
+    int len = 0;
+    int ciphertext_len = 0;
+    
+    // Create and initialise the context
+    ctx = EVP_CIPHER_CTX_new();
 
+    if(ctx == NULL)
+    {
+        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        return -1;
+    }
 
+    // Initialise the encryption operation.
+    if(1 != EVP_EncryptInit(ctx, cipher, key, iv))
+    {
+        std::cerr << "An error occurred during the initialization of the encryption" << std::endl;
+        return -1;
+    }
 
+    //Provide any AAD data. This can be called zero or more times as required
+    if(1 != EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len))
+    {
+        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        return -1;
+    }
 
+    if(1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
+    {
+        std::cerr << "An error occurred during the update of the encryption" << std::endl;
+        return -1;
+    }
+
+    ciphertext_len = len;
+
+	//Finalize Encryption
+    if(1 != EVP_EncryptFinal(ctx, ciphertext + len, &len))
+    {
+        std::cerr << "An error occurred during the finalization of the encryption" << std::endl;
+        return -1;
+    }
+
+    ciphertext_len += len;
+
+    // Get the tag
+    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
+    {
+        std::cerr << "An error occurred while getting the tag" << std::endl;
+        return -1;
+    }
+    
+    EVP_CIPHER_CTX_free(ctx);
+
+    return ciphertext_len;
 }
+
