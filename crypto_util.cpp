@@ -278,3 +278,46 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 // DIGITAL ENVELOPE
 // --------------------------------------------------------------------------
 
+int envelope_encrypt(EVP_PKEY* public_key, unsigned char* plaintext, int pt_len, unsigned char* sym_key_enc, int sym_key_len, unsigned char* iv, unsigned char* ciphertext)
+{
+	int ret = 0;
+	int len = 0;
+	int ciphertext_len = 0;
+
+	// Create and initialise the context 
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+
+	if(!ctx){
+        std::cerr << "An error occurred during the creation of the context" << std::endl;
+		return -1;
+	}
+
+	// Generate the IV and the symmetric key and encrypt the symmetric key 
+	ret = EVP_SealInit(ctx, EVP_aes_256_cbc(), &sym_key_enc, &sym_key_len, iv, &public_key, 1);
+	if(ret != 1){
+        std::cerr << "An error occurred during the seal initialization" << std::endl;
+	    return -1;
+	}
+
+	// Encrypt the plaintext 
+	ret = EVP_SealUpdate(ctx, ciphertext, &len, (unsigned char*)plaintext, pt_len);
+	if(ret != 1){
+        std::cerr << "An error occurred during the seal update" << std::endl;
+	    return -1;
+	}
+        
+	ciphertext_len = len;
+
+	// Finalize the encryption and add the padding
+	ret = EVP_SealFinal(ctx, ciphertext + ciphertext_len, &len);
+	if(ret != 1){
+		error_handler("seal final contesto fallito");
+	    	return -1;
+	}
+
+	ciphertext_len += len;
+
+	EVP_CIPHER_CTX_free(ctx);
+
+	return ciphertext_len;
+}
