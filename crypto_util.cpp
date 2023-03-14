@@ -151,7 +151,22 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
 
 const EVP_CIPHER *cipher = EVP_aes_128_gcm();
 
-int aesgcm_encrypt(unsigned char *plaintext, int plaintext_len,
+/**
+ * Encrypts the plaintext using the AES-GCM encryption algorithm and returns the ciphertext and tag.
+ *
+ * @param plaintext The plaintext to be encrypted.
+ * @param plaintext_len The length of the plaintext.
+ * @param aad The additional authentication data (AAD) to be included in the encryption.
+ * @param aad_len The length of the AAD.
+ * @param key The encryption key.
+ * @param iv The initialization vector (IV).
+ * @param iv_len The length of the IV.
+ * @param ciphertext The buffer where the ciphertext will be written.
+ * @param tag The buffer where the authentication tag will be written.
+ * @return The length of the ciphertext on success, or -1 on error.
+*/
+int aesgcm_encrypt(unsigned char *plaintext, 
+                int plaintext_len,
                 unsigned char *aad, int aad_len,
                 unsigned char *key,
                 unsigned char *iv, int iv_len,
