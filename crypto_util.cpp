@@ -278,7 +278,13 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 // DIGITAL ENVELOPE
 // --------------------------------------------------------------------------
 
-int envelope_encrypt(EVP_PKEY* public_key, unsigned char* plaintext, int pt_len, unsigned char* sym_key_enc, int sym_key_len, unsigned char* iv, unsigned char* ciphertext)
+int envelope_encrypt(EVP_PKEY* public_key, 
+                    unsigned char* plaintext, 
+                    int pt_len, 
+                    unsigned char* sym_key_enc, 
+                    int sym_key_len, 
+                    unsigned char* iv, 
+                    unsigned char* ciphertext)
 {
 	int ret = 0;
 	int len = 0;
@@ -321,3 +327,4 @@ int envelope_encrypt(EVP_PKEY* public_key, unsigned char* plaintext, int pt_len,
 
 	return ciphertext_len;
 }
+
