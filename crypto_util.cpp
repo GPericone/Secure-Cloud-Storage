@@ -2,61 +2,72 @@
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 
-
-
-/*
-
-Funzioni di OPENSSL da utilizzare:
-
-- Gestione del certificato
-- Digital Envelope
-- AES-128 GCM
-
-*/
-
 // --------------------------------------------------------------------------
-// CERTIFICATI
+// CERTIFICATES
 // --------------------------------------------------------------------------
 
-int load_certificate(std::string filename, X509 **certificate){
-    // converto la stringa filename in un array di caratteri, per poter usare fopen -> Altra soluzione uso fstream
-	FILE* fp = fopen(filename.c_str(), "r");
-	if(!fp)
+/**
+ * Loads a certificate from file.
+ *
+ * @param filename the name of the file containing the certificate
+ * @param certificate pointer to the certificate object to be loaded
+ * @return 0 if successful, -1 otherwise
+ */
+int load_certificate(std::string filename, X509 **certificate)
+{
+    // Convert filename to a character array, so that it can be used with fopen -> Alternative solution: use fstream
+    FILE* fp = fopen(filename.c_str(), "r");
+    if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
-		return -1;
-	}
-	*certificate = PEM_read_X509(fp, NULL, NULL, NULL);
-	if(!certificate)
+        return -1;
+    }
+    *certificate = PEM_read_X509(fp, NULL, NULL, NULL);
+    if (!certificate)
     {
         std::cerr << "An error occurred while reading the certificate" << std::endl;
-		return -1;
-	}
-	fclose(fp);
-	return 0;
+        return -1;
+    }
+    fclose(fp);
+    return 0;
 }
 
-int load_crl(std::string filename, X509_CRL** crl){
-	FILE* fp = fopen(filename.c_str(), "r");
-	if(!fp)
+/**
+ * Loads a Certificate Revocation List (CRL) from file.
+ *
+ * @param filename the name of the file containing the CRL
+ * @param crl pointer to the CRL object to be loaded
+ * @return 0 if successful, -1 otherwise
+ */
+int load_crl(std::string filename, X509_CRL** crl)
+{
+    FILE* fp = fopen(filename.c_str(), "r");
+    if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
-		return -1;
-	}
-	*crl = PEM_read_X509_CRL(fp, NULL, NULL, NULL);
-	if(!crl)
+        return -1;
+    }
+    *crl = PEM_read_X509_CRL(fp, NULL, NULL, NULL);
+    if (!crl)
     {
         std::cerr << "An error occurred while reading the CRL" << std::endl;
-		return -1;
-	}
-	fclose(fp);
-	return 0;
+        return -1;
+    }
+    fclose(fp);
+    return 0;
 }
 
+/**
+ * Create an X509_STORE with the given CA certificate and CRL.
+ *
+ * @param store the address of a pointer to an X509_STORE to be created.
+ * @param CA_certificate a pointer to an X509 certificate representing the Certification Authority.
+ * @param crl a pointer to an X509_CRL representing the Certificate Revocation List.
+ * @return 0 if the store was created successfully, -1 otherwise.
+ */
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
-
-    // Alloco uno store vuoto, la funzione ritorna lo store o NULL se è avvenuto un errore
+    // Allocate an empty store, returning NULL if an error occurred
     *store = X509_STORE_new();
     if(store == NULL)
     {
@@ -64,34 +75,40 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
         return -1;
     }
 
-    // Aggiungo il certificato della Certification Authority nello store
+    // Add the CA certificate to the store
     if(X509_STORE_add_cert(*store, CA_certificate) != 1)
     {
 		std::cerr << "An error occurred during the addition of certificate" << std::endl;
 		return -1;
 	}
 
-    // Aggiungo il CRL nello store
+    // Add the CRL to the store
     if(X509_STORE_add_crl(*store, crl) != 1)
     {
 		std::cerr << "An error occurred during the addition of CRL" << std::endl;
 		return -1;
 	}
 
-    /*
-    Configura lo store così che effettui il controllo sul CRL per ogni certificato valido prima che restituisca il risultato
-    */
+
+    //Configure the store to perform CRL checking for every valid certificate before returning the result
     if(X509_STORE_set_flags(*store, X509_V_FLAG_CRL_CHECK) != 1){
 		std::cerr << "An error occurred while configuring the store flags" << std::endl;
 		return -1;
 	}
 
     return 0;
-
 }
 
-int verify_certificate (X509_STORE *store, X509 *certificate){
-    // Alloco un nuovo contesto per la verifica dei certificato, ritornerà il contesto allocato o NULL se ci sarà un errore
+/**
+ * Verifies if a certificate is valid and trusted by a given certificate store.
+ *
+ * @param store A pointer to the X509_STORE object representing the certificate store.
+ * @param certificate A pointer to the X509 object representing the certificate to verify.
+ * @return Returns 0 if the certificate is verified successfully and is trusted, or -1 if an error occurs.
+ */
+int verify_certificate(X509_STORE *store, X509 *certificate)
+{
+    // Allocate a new context for certificate verification, returns the allocated context or NULL if an error occurs
     X509_STORE_CTX* certificate_ctx = X509_STORE_CTX_new();
     if(certificate_ctx == NULL)
     {
@@ -100,32 +117,24 @@ int verify_certificate (X509_STORE *store, X509 *certificate){
         return -1;
     }
 
-    /*
-    Inizializzo il contesto per la verifica del certificato
-    int X509_STORE_CTX_init(X509_STORE_CTX* ctx, X509_STORE* s, X509* cert, NULL);
-    La funzione ritorna 1 se l'inizializzazione è avvenuta correttamente
-    */
+
+    // Initialize the context for certificate verification.
     if(X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
     {
-        std:cerr << "An error occured during initialization of the store context" << std:endl;
+        std:cerr << "An error occurred during initialization of the store context" << std:endl;
         X509_STORE* X509_STORE_free(certificate_ctx);
         return -1;
     }
 
-    /*
-    Verificato il certificato
-    int X509_STORE_CTX_init(X509_STORE_CTX* ctx, X509_STORE* s, X509* cert, NULL);
-    La funzione ritorna 1 se la verifica è avvenuta correttamente, 0 se non è verificato o < 0 in caso di errore
-    */
-    int verification_result;
-    verification_result = X509_verify_cert(certificate_ctx);
+    // Verify the certificate.
+    int verification_result = X509_verify_cert(certificate_ctx);
     if(verification_result < 0)
     {
         std::cerr << "An error occurred during the verification of the certificate" << std::endl;
         X509_STORE* X509_STORE_free(certificate_ctx);
         return -1;
     }
-    else if (verification_result = 0)
+    else if (verification_result == 0)
     {
         X509_STORE* X509_STORE_free(certificate_ctx);
         std::cerr << "The certificate cannot be verified" << std::endl;
@@ -328,3 +337,49 @@ int envelope_encrypt(EVP_PKEY* public_key,
 	return ciphertext_len;
 }
 
+int envelope_decrypt(EVP_PKEY* private_key, 
+                    unsigned char* ciphertext, 
+                    int ct_len, 
+                    unsigned char* sym_key_enc, 
+                    int sym_key_len, 
+                    unsigned char* iv, 
+                    unsigned char* plaintext)
+{
+
+	int ret = 0;
+	int outlen = 0;
+	int plaintext_len = 0;
+
+	// Create and initialise the context 
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	if(!ctx){
+		error_handler("creazione contesto fallita");
+		return -1;
+	}
+
+	// Decrypt the symmetric key that will be used to decrypt the ciphertext 
+	ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
+	if(ret != 1){
+		error_handler("open init contesto fallito");
+	    	return -1;
+	}
+
+	// Decrypt the ciphertext 
+	ret = EVP_OpenUpdate(ctx, plaintext, &outlen, ciphertext, ct_len);
+	if(ret != 1){
+		error_handler("open update contesto fallito");
+	    	return -1;
+	}
+	pt_len += outlen;
+
+	ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
+	if(ret != 1){
+		error_handler("open final contesto fallito");
+	    	return -1;
+	}
+
+	plaintext_len += outlen;
+	EVP_CIPHER_CTX_free(ctx);
+
+	return plaintext_len;
+}
