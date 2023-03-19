@@ -1,6 +1,12 @@
+#include <iostream>
+#include <cstring>
+#include <string>
 #include <openssl/evp.h>
+#include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
+#include <openssl/rand.h>
+#include <openssl/err.h>
 
 // --------------------------------------------------------------------------
 // CERTIFICATES
@@ -143,6 +149,23 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
 
     X509_STORE* X509_STORE_free(certificate_ctx);
     return 0;
+}
+
+EVP_PKEY* load_public_key(const char* public_key_file) {
+    FILE* pub_key_file = fopen(public_key_file, "r");
+    if (!pub_key_file) {
+        std::cerr << "Error opening public key file: " << public_key_file << std::endl;
+        return nullptr;
+    }
+
+    EVP_PKEY* public_key = PEM_read_PUBKEY(pub_key_file, nullptr, nullptr, nullptr);
+    fclose(pub_key_file);
+
+    if (!public_key) {
+        std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
+    }
+
+    return public_key;
 }
 
 // --------------------------------------------------------------------------
