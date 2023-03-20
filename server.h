@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 struct sockaddr_in myAddr, clAddr;
-int port, sd, ret, len, newSd;
+socklen_t len;
+int port, sd, ret, newSd;
 pid_t pid;
 
