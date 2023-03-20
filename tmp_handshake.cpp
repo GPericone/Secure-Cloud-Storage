@@ -1,19 +1,4 @@
-// Handshake message M1 - NonceC | Username
-#include <iostream>
-#include <cstring>
-#include <string>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <openssl/rand.h>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-#include <openssl/x509.h>
-#include <openssl/rsa.h>
-
-#define USERNAMESIZE 25
-#define NONCE_LEN 16
+#include "utils.h"
 
 int send_message1(int socket)
 {
@@ -36,25 +21,33 @@ int send_message1(int socket)
     }
 
     // Calculate payload size
+    unsigned char* payload_size_byte, *message;
     size_t payload_size = username.size() + NONCE_LEN;
 
     // Create message buffer
     size_t message_size = sizeof(int) + payload_size;
-    unsigned char* message = new unsigned char[message_size];
+    memory_handler(1, socket, payload_size, payload_size_byte);
+    serialize_int(payload_size, payload_size_byte);
 
     // Serialize payload size and copy into message buffer
-    int payload_size_network_byte_order = htonl(payload_size);
+    // int payload_size_network_byte_order = htonl(payload_size);
+
     memcpy(message, &payload_size_network_byte_order, sizeof(int));
 
+    int message_size = sizeof(int) + NONCE_LEN + username.size();
+    memory_handler(1, socket, message_siz, &message);
+
     // Copy nonce and username into message buffer
-    memcpy(message + sizeof(int), nonce, NONCE_LEN);
-    memcpy(message + sizeof(int) + NONCE_LEN, username.c_str(), username.size());
+    
+    memcpy(message, payload_size_byte, sizeof(int));
+	memcpy((unsigned char*)&message[sizeof(int)], nonce, NONCE_LEN);
+	memcpy((unsigned char*)&message[sizeof(int) + NONCE_LEN], username.c_str(), username.size());
 
     // Send message
     int bytes_sent = send(socket, message, message_size, 0);
-    delete[] message;
 
     if (bytes_sent < 0) {
+        free_var(1);
         std::cout << "Error sending message" << std::endl;
         return -1;
     }

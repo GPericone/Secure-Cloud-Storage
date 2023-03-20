@@ -1,12 +1,4 @@
-#include <iostream>
-#include <cstring>
-#include <string>
-#include <openssl/evp.h>
-#include <openssl/pem.h>
-#include <openssl/x509.h>
-#include <openssl/x509_vfy.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
+#include "utils.h"
 
 // --------------------------------------------------------------------------
 // CERTIFICATES
