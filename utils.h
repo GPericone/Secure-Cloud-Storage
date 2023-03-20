@@ -40,7 +40,7 @@ void serialize_longint(long int val, unsigned char *c);
 // CERTIFICATES
 
 int load_certificate(std::string filename, X509 **certificate);
-int load_crl(std::string filename, X509_CRL** crl)
+int load_crl(std::string filename, X509_CRL** crl);
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
 EVP_PKEY* load_public_key(const char* public_key_file);

@@ -4,6 +4,10 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
+void error_handler(std::string error) {
+    printf("Error={}", error);
+}
+
 /**
  * Loads a certificate from file.
  *
@@ -111,7 +115,7 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     if(certificate_ctx == NULL)
     {
         std::cerr << "An error occurred during the creation of the store context" << std::endl;
-        X509_STORE* X509_STORE_free(certificate_ctx);
+        X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
 
@@ -119,8 +123,8 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     // Initialize the context for certificate verification.
     if(X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
     {
-        std:cerr << "An error occurred during initialization of the store context" << std:endl;
-        X509_STORE* X509_STORE_free(certificate_ctx);
+        std:cerr << "An error occurred during initialization of the store context" << std::endl;
+        X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
 
@@ -129,17 +133,17 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     if(verification_result < 0)
     {
         std::cerr << "An error occurred during the verification of the certificate" << std::endl;
-        X509_STORE* X509_STORE_free(certificate_ctx);
+        X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
     else if (verification_result == 0)
     {
-        X509_STORE* X509_STORE_free(certificate_ctx);
+        X509_STORE_CTX_free(certificate_ctx);
         std::cerr << "The certificate cannot be verified" << std::endl;
         return -1;
     }
 
-    X509_STORE* X509_STORE_free(certificate_ctx);
+    X509_STORE_CTX_free(certificate_ctx);
     return 0;
 }
 
@@ -400,7 +404,7 @@ int envelope_decrypt(EVP_PKEY* private_key,
 		error_handler("open update contesto fallito");
 	    	return -1;
 	}
-	pt_len += outlen;
+	plaintext_len += outlen;
 
 	ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
 	if(ret != 1){
