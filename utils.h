@@ -32,8 +32,10 @@ extern unsigned char *sv_free_buf[MAX_BUF_SIZE];
 
 // MEMORY HANDLER
 
-void free_var(int side);
-void memory_handler(int side, int socket, int new_size, unsigned char **new_buf);
+//void free_var(int side);
+//void memory_handler(int side, int socket, int new_size, unsigned char **new_buf);
+void free_allocated_buffers(unsigned char* buffer_array[])
+int allocate_and_store_buffer(unsigned char* buffer_array[], int socket, int new_size, unsigned char** new_buf_ptr)
 void serialize_int(int val, unsigned char *c);
 void serialize_longint(long int val, unsigned char *c);
 
