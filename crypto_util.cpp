@@ -4,7 +4,8 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
-void error_handler(std::string error) {
+void error_handler(std::string error)
+{
     printf("Error={}", error);
 }
 
@@ -18,7 +19,7 @@ void error_handler(std::string error) {
 int load_certificate(std::string filename, X509 **certificate)
 {
     // Convert filename to a character array, so that it can be used with fopen -> Alternative solution: use fstream
-    FILE* fp = fopen(filename.c_str(), "r");
+    FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
@@ -41,9 +42,9 @@ int load_certificate(std::string filename, X509 **certificate)
  * @param crl pointer to the CRL object to be loaded
  * @return 0 if successful, -1 otherwise
  */
-int load_crl(std::string filename, X509_CRL** crl)
+int load_crl(std::string filename, X509_CRL **crl)
 {
-    FILE* fp = fopen(filename.c_str(), "r");
+    FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
@@ -71,32 +72,32 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
     // Allocate an empty store, returning NULL if an error occurred
     *store = X509_STORE_new();
-    if(store == NULL)
+    if (store == NULL)
     {
         std::cerr << "An error occurred during the creation of the store" << std::endl;
         return -1;
     }
 
     // Add the CA certificate to the store
-    if(X509_STORE_add_cert(*store, CA_certificate) != 1)
+    if (X509_STORE_add_cert(*store, CA_certificate) != 1)
     {
-		std::cerr << "An error occurred during the addition of certificate" << std::endl;
-		return -1;
-	}
+        std::cerr << "An error occurred during the addition of certificate" << std::endl;
+        return -1;
+    }
 
     // Add the CRL to the store
-    if(X509_STORE_add_crl(*store, crl) != 1)
+    if (X509_STORE_add_crl(*store, crl) != 1)
     {
-		std::cerr << "An error occurred during the addition of CRL" << std::endl;
-		return -1;
-	}
+        std::cerr << "An error occurred during the addition of CRL" << std::endl;
+        return -1;
+    }
 
-
-    //Configure the store to perform CRL checking for every valid certificate before returning the result
-    if(X509_STORE_set_flags(*store, X509_V_FLAG_CRL_CHECK) != 1){
-		std::cerr << "An error occurred while configuring the store flags" << std::endl;
-		return -1;
-	}
+    // Configure the store to perform CRL checking for every valid certificate before returning the result
+    if (X509_STORE_set_flags(*store, X509_V_FLAG_CRL_CHECK) != 1)
+    {
+        std::cerr << "An error occurred while configuring the store flags" << std::endl;
+        return -1;
+    }
 
     return 0;
 }
@@ -111,26 +112,26 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 int verify_certificate(X509_STORE *store, X509 *certificate)
 {
     // Allocate a new context for certificate verification, returns the allocated context or NULL if an error occurs
-    X509_STORE_CTX* certificate_ctx = X509_STORE_CTX_new();
-    if(certificate_ctx == NULL)
+    X509_STORE_CTX *certificate_ctx = X509_STORE_CTX_new();
+    if (certificate_ctx == NULL)
     {
         std::cerr << "An error occurred during the creation of the store context" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
 
-
     // Initialize the context for certificate verification.
-    if(X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
+    if (X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
     {
-        std:cerr << "An error occurred during initialization of the store context" << std::endl;
+    std:
+        cerr << "An error occurred during initialization of the store context" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
 
     // Verify the certificate.
     int verification_result = X509_verify_cert(certificate_ctx);
-    if(verification_result < 0)
+    if (verification_result < 0)
     {
         std::cerr << "An error occurred during the verification of the certificate" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
@@ -147,17 +148,20 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     return 0;
 }
 
-EVP_PKEY* load_public_key(const char* public_key_file) {
-    FILE* pub_key_file = fopen(public_key_file, "r");
-    if (!pub_key_file) {
+EVP_PKEY *load_public_key(const char *public_key_file)
+{
+    FILE *pub_key_file = fopen(public_key_file, "r");
+    if (!pub_key_file)
+    {
         std::cerr << "Error opening public key file: " << public_key_file << std::endl;
         return nullptr;
     }
 
-    EVP_PKEY* public_key = PEM_read_PUBKEY(pub_key_file, nullptr, nullptr, nullptr);
+    EVP_PKEY *public_key = PEM_read_PUBKEY(pub_key_file, nullptr, nullptr, nullptr);
     fclose(pub_key_file);
 
-    if (!public_key) {
+    if (!public_key)
+    {
         std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
     }
 
@@ -183,44 +187,44 @@ const EVP_CIPHER *cipher = EVP_aes_128_gcm();
  * @param ciphertext The buffer where the ciphertext will be written.
  * @param tag The buffer where the authentication tag will be written.
  * @return The length of the ciphertext on success, or -1 on error.
-*/
-int aesgcm_encrypt(unsigned char *plaintext, 
-                int plaintext_len,
-                unsigned char *aad, int aad_len,
-                unsigned char *key,
-                unsigned char *iv, int iv_len,
-                unsigned char *ciphertext,
-                unsigned char *tag)
+ */
+int aesgcm_encrypt(unsigned char *plaintext,
+                   int plaintext_len,
+                   unsigned char *aad, int aad_len,
+                   unsigned char *key,
+                   unsigned char *iv, int iv_len,
+                   unsigned char *ciphertext,
+                   unsigned char *tag)
 {
     EVP_CIPHER_CTX *ctx;
 
     int len = 0;
     int ciphertext_len = 0;
-    
+
     // Create and initialise the context
     ctx = EVP_CIPHER_CTX_new();
 
-    if(ctx == NULL)
+    if (ctx == NULL)
     {
         std::cerr << "An error occurred during the creation of the context" << std::endl;
         return -1;
     }
 
     // Initialise the encryption operation.
-    if(1 != EVP_EncryptInit(ctx, cipher, key, iv))
+    if (1 != EVP_EncryptInit(ctx, cipher, key, iv))
     {
         std::cerr << "An error occurred during the initialization of the encryption" << std::endl;
         return -1;
     }
 
-    //Provide any AAD data. This can be called zero or more times as required
-    if(1 != EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len))
+    // Provide any AAD data. This can be called zero or more times as required
+    if (1 != EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len))
     {
         std::cerr << "An error occurred during the provision of AAD data" << std::endl;
         return -1;
     }
 
-    if(1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
+    if (1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
     {
         std::cerr << "An error occurred during the update of the encryption" << std::endl;
         return -1;
@@ -228,8 +232,8 @@ int aesgcm_encrypt(unsigned char *plaintext,
 
     ciphertext_len = len;
 
-	//Finalize Encryption
-    if(1 != EVP_EncryptFinal(ctx, ciphertext + len, &len))
+    // Finalize Encryption
+    if (1 != EVP_EncryptFinal(ctx, ciphertext + len, &len))
     {
         std::cerr << "An error occurred during the finalization of the encryption" << std::endl;
         return -1;
@@ -238,23 +242,23 @@ int aesgcm_encrypt(unsigned char *plaintext,
     ciphertext_len += len;
 
     // Get the tag
-    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
+    if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
     {
         std::cerr << "An error occurred while getting the tag" << std::endl;
         return -1;
     }
-    
+
     EVP_CIPHER_CTX_free(ctx);
 
     return ciphertext_len;
 }
 
 int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
-                unsigned char *aad, int aad_len,
-                unsigned char *tag,
-                unsigned char *key,
-                unsigned char *iv, int iv_len,
-                unsigned char *plaintext)
+                   unsigned char *aad, int aad_len,
+                   unsigned char *tag,
+                   unsigned char *key,
+                   unsigned char *iv, int iv_len,
+                   unsigned char *plaintext)
 {
     EVP_CIPHER_CTX *ctx;
     int len;
@@ -264,36 +268,36 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     /* Create and initialise the context */
     ctx = EVP_CIPHER_CTX_new();
 
-    if(ctx == NULL)
+    if (ctx == NULL)
     {
         std::cerr << "An error occurred during the creation of the context" << std::endl;
         return -1;
     }
 
-    if(!EVP_DecryptInit(ctx, cipher, key, iv))
+    if (!EVP_DecryptInit(ctx, cipher, key, iv))
     {
         std::cerr << "An error occurred during the initialization of the decryption" << std::endl;
         return -1;
     }
 
-	//Provide any AAD data.
-    if(!EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len))
+    // Provide any AAD data.
+    if (!EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len))
     {
         std::cerr << "An error occurred during the provision of AAD data" << std::endl;
         return -1;
     }
 
-	//Provide the message to be decrypted, and obtain the plaintext output.
-    if(!EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
+    // Provide the message to be decrypted, and obtain the plaintext output.
+    if (!EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
     {
         std::cerr << "An error occurred during the update of the decryption" << std::endl;
         return -1;
     }
-    
+
     plaintext_len = len;
 
     /* Set expected tag value. */
-    if(!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag))
+    if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag))
     {
         std::cerr << "An error occurred while getting the tag" << std::endl;
         return -1;
@@ -307,11 +311,14 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     /* Clean up */
     EVP_CIPHER_CTX_free(ctx);
 
-    if(ret > 0) {
+    if (ret > 0)
+    {
         /* Success */
         plaintext_len += len;
         return plaintext_len;
-    } else {
+    }
+    else
+    {
         /* Verify failed */
         return -1;
     }
@@ -321,99 +328,107 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 // DIGITAL ENVELOPE
 // --------------------------------------------------------------------------
 
-int envelope_encrypt(EVP_PKEY* public_key, 
-                    unsigned char* plaintext, 
-                    int pt_len, 
-                    unsigned char* sym_key_enc, 
-                    int sym_key_len, 
-                    unsigned char* iv, 
-                    unsigned char* ciphertext)
+int envelope_encrypt(EVP_PKEY *public_key,
+                     unsigned char *plaintext,
+                     int pt_len,
+                     unsigned char *sym_key_enc,
+                     int sym_key_len,
+                     unsigned char *iv,
+                     unsigned char *ciphertext)
 {
-	int ret = 0;
-	int len = 0;
-	int ciphertext_len = 0;
+    int ret = 0;
+    int len = 0;
+    int ciphertext_len = 0;
 
-	// Create and initialise the context 
-	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    // Create and initialise the context
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
 
-	if(!ctx){
+    if (!ctx)
+    {
         std::cerr << "An error occurred during the creation of the context" << std::endl;
-		return -1;
-	}
+        return -1;
+    }
 
-	// Generate the IV and the symmetric key and encrypt the symmetric key 
-	ret = EVP_SealInit(ctx, EVP_aes_256_cbc(), &sym_key_enc, &sym_key_len, iv, &public_key, 1);
-	if(ret != 1){
+    // Generate the IV and the symmetric key and encrypt the symmetric key
+    ret = EVP_SealInit(ctx, EVP_aes_256_cbc(), &sym_key_enc, &sym_key_len, iv, &public_key, 1);
+    if (ret != 1)
+    {
         std::cerr << "An error occurred during the seal initialization" << std::endl;
-	    return -1;
-	}
+        return -1;
+    }
 
-	// Encrypt the plaintext 
-	ret = EVP_SealUpdate(ctx, ciphertext, &len, (unsigned char*)plaintext, pt_len);
-	if(ret != 1){
+    // Encrypt the plaintext
+    ret = EVP_SealUpdate(ctx, ciphertext, &len, (unsigned char *)plaintext, pt_len);
+    if (ret != 1)
+    {
         std::cerr << "An error occurred during the seal update" << std::endl;
-	    return -1;
-	}
-        
-	ciphertext_len = len;
+        return -1;
+    }
 
-	// Finalize the encryption and add the padding
-	ret = EVP_SealFinal(ctx, ciphertext + ciphertext_len, &len);
-	if(ret != 1){
-		error_handler("seal final contesto fallito");
-	    	return -1;
-	}
+    ciphertext_len = len;
 
-	ciphertext_len += len;
+    // Finalize the encryption and add the padding
+    ret = EVP_SealFinal(ctx, ciphertext + ciphertext_len, &len);
+    if (ret != 1)
+    {
+        error_handler("seal final contesto fallito");
+        return -1;
+    }
 
-	EVP_CIPHER_CTX_free(ctx);
+    ciphertext_len += len;
 
-	return ciphertext_len;
+    EVP_CIPHER_CTX_free(ctx);
+
+    return ciphertext_len;
 }
 
-int envelope_decrypt(EVP_PKEY* private_key, 
-                    unsigned char* ciphertext, 
-                    int ct_len, 
-                    unsigned char* sym_key_enc, 
-                    int sym_key_len, 
-                    unsigned char* iv, 
-                    unsigned char* plaintext)
+int envelope_decrypt(EVP_PKEY *private_key,
+                     unsigned char *ciphertext,
+                     int ct_len,
+                     unsigned char *sym_key_enc,
+                     int sym_key_len,
+                     unsigned char *iv,
+                     unsigned char *plaintext)
 {
 
-	int ret = 0;
-	int outlen = 0;
-	int plaintext_len = 0;
+    int ret = 0;
+    int outlen = 0;
+    int plaintext_len = 0;
 
-	// Create and initialise the context 
-	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	if(!ctx){
-		error_handler("creazione contesto fallita");
-		return -1;
-	}
+    // Create and initialise the context
+    EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+    if (!ctx)
+    {
+        error_handler("creazione contesto fallita");
+        return -1;
+    }
 
-	// Decrypt the symmetric key that will be used to decrypt the ciphertext 
-	ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
-	if(ret != 1){
-		error_handler("open init contesto fallito");
-	    	return -1;
-	}
+    // Decrypt the symmetric key that will be used to decrypt the ciphertext
+    ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
+    if (ret != 1)
+    {
+        error_handler("open init contesto fallito");
+        return -1;
+    }
 
-	// Decrypt the ciphertext 
-	ret = EVP_OpenUpdate(ctx, plaintext, &outlen, ciphertext, ct_len);
-	if(ret != 1){
-		error_handler("open update contesto fallito");
-	    	return -1;
-	}
-	plaintext_len += outlen;
+    // Decrypt the ciphertext
+    ret = EVP_OpenUpdate(ctx, plaintext, &outlen, ciphertext, ct_len);
+    if (ret != 1)
+    {
+        error_handler("open update contesto fallito");
+        return -1;
+    }
+    plaintext_len += outlen;
 
-	ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
-	if(ret != 1){
-		error_handler("open final contesto fallito");
-	    	return -1;
-	}
+    ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
+    if (ret != 1)
+    {
+        error_handler("open final contesto fallito");
+        return -1;
+    }
 
-	plaintext_len += outlen;
-	EVP_CIPHER_CTX_free(ctx);
+    plaintext_len += outlen;
+    EVP_CIPHER_CTX_free(ctx);
 
-	return plaintext_len;
+    return plaintext_len;
 }

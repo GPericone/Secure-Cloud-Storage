@@ -14,7 +14,7 @@ int send_message1(int socket)
     }
 
     // Generate nonce with OpenSSL
-    
+
     unsigned char nonce[NONCE_LEN];
     if (RAND_bytes(nonce, NONCE_LEN) != 1)
     {
@@ -29,7 +29,7 @@ int send_message1(int socket)
 
     // Create message buffer
 
-    allocate_and_store_buffer(cl_free_buf, socket, payload_size, &payload_size_byte)
+    allocate_and_store_buffer(cl_free_buf, socket, payload_size, &payload_size_byte);
     serialize_int(payload_size, payload_size_byte);
 
     // Serialize payload size and copy into message buffer
@@ -46,7 +46,8 @@ int send_message1(int socket)
     // Send message
     int bytes_sent = send(socket, message, message_size, 0);
 
-    if (bytes_sent < 0) {
+    if (bytes_sent < 0)
+    {
         free_allocated_buffers(cl_free_buf);
         std::cout << "Error sending message" << std::endl;
         return -1;
