@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <cstring>
+#include <dirent.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -20,15 +21,18 @@
 
 using namespace std;
 
-#define USERNAMESIZE 25
-#define NONCE_LEN 16
+//#define USERNAMESIZE 25
+//#define NONCE_LEN 16
 
 const int MAX_BUF_SIZE = 65536;
+const size_t MAX_PATH = 512;
+const size_t NONCE_LEN = 16;
+const size_t USERNAMESIZE = 25;
 
-extern int cl_index_free_buf;
-extern unsigned char *cl_free_buf[MAX_BUF_SIZE];
-extern int sv_index_free_buf;
-extern unsigned char *sv_free_buf[MAX_BUF_SIZE];
+// extern int cl_index_free_buf;
+extern unsigned char *cl_free_buf[MAX_BUF_SIZE] = {0};
+// extern int sv_index_free_buf;
+extern unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
 
 // MEMORY HANDLER
 
@@ -38,6 +42,9 @@ void free_allocated_buffers(unsigned char *buffer_array[]);
 int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, int new_size, unsigned char **new_buf_ptr);
 void serialize_int(int val, unsigned char *c);
 void serialize_longint(long int val, unsigned char *c);
+
+int recv_all(int socket, void *buffer, ssize_t len);
+void log_error(const std::string &msg);
 
 // CERTIFICATES
 

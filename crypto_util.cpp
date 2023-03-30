@@ -4,9 +4,8 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
-void error_handler(std::string error)
-{
-    printf("Error={}", error);
+void log_error(const std::string &msg) {
+    std::cerr << "Error: " << msg << std::endl;
 }
 
 /**
@@ -371,7 +370,7 @@ int envelope_encrypt(EVP_PKEY *public_key,
     ret = EVP_SealFinal(ctx, ciphertext + ciphertext_len, &len);
     if (ret != 1)
     {
-        error_handler("seal final contesto fallito");
+        log_error("seal final contesto fallito");
         return -1;
     }
 
@@ -399,7 +398,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx)
     {
-        error_handler("creazione contesto fallita");
+        log_error("creazione contesto fallita");
         return -1;
     }
 
@@ -407,7 +406,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
     if (ret != 1)
     {
-        error_handler("open init contesto fallito");
+        log_error("open init contesto fallito");
         return -1;
     }
 
@@ -415,7 +414,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenUpdate(ctx, plaintext, &outlen, ciphertext, ct_len);
     if (ret != 1)
     {
-        error_handler("open update contesto fallito");
+        log_error("open update contesto fallito");
         return -1;
     }
     plaintext_len += outlen;
@@ -423,7 +422,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
     if (ret != 1)
     {
-        error_handler("open final contesto fallito");
+        log_error("open final contesto fallito");
         return -1;
     }
 

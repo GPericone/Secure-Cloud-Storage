@@ -1,33 +1,5 @@
 #include "utils.h"
 
-// void free_var(int side){	// Buffer allocated with malloc() pointers, multiple free()
-// 	int counter = 0;
-// 	if(side == 1){
-// 		counter = cl_index_free_buf;
-// 		for(int i = 0; i < counter - 1; i++){
-// 			if(cl_free_buf[i]){
-// 				free((void*)cl_free_buf[i]);
-// 				cl_free_buf[i] = NULL;
-// 			}
-// 		}
-// 		cl_index_free_buf = 0;
-// 	}
-// 	else if(side == 0){
-// 		counter = sv_index_free_buf;
-// 		for(int i = 0; i < counter - 1; i++){
-// 			if(sv_free_buf[i]){
-// 				free((void*)sv_free_buf[i]);
-// 				sv_free_buf[i] = NULL;
-// 			}
-// 		}
-// 		sv_index_free_buf = 0;
-// 	}
-// 	else{
-// 		cerr << "Panic! Critical error, shutting down program..." << endl;
-// 		exit(0);
-// 	}
-// }
-
 void free_allocated_buffers(unsigned char *buffer_array[])
 {
     int counter = 0;
@@ -43,36 +15,7 @@ void free_allocated_buffers(unsigned char *buffer_array[])
     std::cout << "Freed " << counter << " allocated buffers" << std::endl;
 }
 
-// void memory_handler(int side, int socket, int new_size, unsigned char **new_buf){
-// 	*new_buf = (unsigned char*)calloc(new_size+1, sizeof(unsigned char));
-// 	if(!*new_buf){
-// 		free_var(side);
-// 		if(socket)
-// 			close(socket);
-
-// 		cerr << "Critical error: malloc() failed allocating " << new_size << " new bytes" << endl << "Exit program" << endl;
-// 		exit(0);
-// 	}
-
-// 	if(side == 1){
-// 		cl_free_buf[cl_index_free_buf] = *new_buf;
-// 		cl_index_free_buf++;
-// 	}
-// 	else if(side == 0){
-// 		sv_free_buf[sv_index_free_buf] = *new_buf;
-// 		sv_index_free_buf++;
-// 	}
-// 	else{
-// 		cerr << "Panic! Critical error, shutting down program..." << endl;
-// 		if(socket)
-// 			close(socket);
-// 		free_var(0);
-// 		free_var(1);
-// 		exit(0);
-// 	}
-// }
-
-int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, int new_size, unsigned char **new_buf_ptr)
+int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr)
 {
     if (buffer_array == NULL)
     {
@@ -119,22 +62,77 @@ int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, int new
     return i;
 }
 
-void serialize_int(int val, unsigned char *c)
+// void serialize_int(int input, unsigned char *output)
+// {
+//     output[0] = input & 0xFF;
+//     output[1] = (input) >> 8) & 0xFF;
+//     output[2] = (input >> 16) & 0xFF;
+//     output[3] = (input >> 24) & 0xFF;
+// }
+
+void serialize_int(int input, unsigned char *output)
 {
-    c[0] = val & 0xFF;
-    c[1] = (val >> 8) & 0xFF;
-    c[2] = (val >> 16) & 0xFF;
-    c[3] = (val >> 24) & 0xFF;
+    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+    std::copy(p, p + sizeof(int), output);
 }
 
-void serialize_longint(long int val, unsigned char *c)
+
+void serialize_longint(long int input, unsigned char *output)
 {
-    c[0] = val & 0xFF;
-    c[1] = (val >> 8) & 0xFF;
-    c[2] = (val >> 16) & 0xFF;
-    c[3] = (val >> 24) & 0xFF;
-    c[4] = (val >> 32) & 0xFF;
-    c[5] = (val >> 40) & 0xFF;
-    c[6] = (val >> 48) & 0xFF;
-    c[7] = (val >> 56) & 0xFF;
+    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+    std::copy(p, p + sizeof(long int), output);
+}
+
+// void serialize_longint(long int val, unsigned char *c)
+// {
+//     c[0] = val & 0xFF;
+//     c[1] = (val >> 8) & 0xFF;
+//     c[2] = (val >> 16) & 0xFF;
+//     c[3] = (val >> 24) & 0xFF;
+//     c[4] = (val >> 32) & 0xFF;
+//     c[5] = (val >> 40) & 0xFF;
+//     c[6] = (val >> 48) & 0xFF;
+//     c[7] = (val >> 56) & 0xFF;
+// }
+
+/**
+ * @brief Receive a specified number of bytes from a socket.
+ *
+ * This function receives data from the specified socket and stores it in the provided buffer.
+ * It will continue to receive data until the specified number of bytes have been received or an
+ * error occurs. In case of an error or if the connection is closed before receiving all the
+ * requested bytes, the function returns the number of bytes received so far or -1 if an error occurred.
+ *
+ * @param socket The socket file descriptor from which data should be received.
+ * @param buffer A pointer to the buffer where the received data should be stored.
+ * @param len The number of bytes to receive.
+ * @return The number of bytes actually received or -1 if an error occurred.
+ */
+int recv_all(int socket, void *buffer, ssize_t len)
+{
+    ssize_t bytes_left = len;                       // The number of bytes remaining to be received
+    ssize_t bytes_read;                             // The number of bytes read in the current iteration
+    char *buffer_ptr = static_cast<char *>(buffer); // A pointer to the current position in the buffer
+
+    // Continue to receive data until all requested bytes have been read or an error occurs
+    while (bytes_left > 0)
+    {
+        bytes_read = recv(socket, static_cast<void *>(buffer_ptr), bytes_left, 0);
+
+        if (bytes_read < 0)
+        {
+            log_error("Failed to receive data from the socket");
+            return -1;
+        }
+
+        if (bytes_read == 0)
+        {
+            break;
+        }
+
+        bytes_left -= bytes_read;
+        buffer_ptr += bytes_read;
+
+        return len - bytes_left;
+    }
 }

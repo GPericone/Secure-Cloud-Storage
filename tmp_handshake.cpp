@@ -6,19 +6,19 @@ int send_message1(int socket)
     std::cout << "Enter your username" << std::endl;
     std::cin >> username;
 
-    // Definire la costante USERNAMESIZE nell'header
     if (username.empty() || username.size() > USERNAMESIZE)
     {
-        std::cout << "Invalid username" << std::endl;
+        log_error("Invalid username");
         return -1;
     }
 
     // Generate nonce with OpenSSL
 
-    unsigned char nonce[NONCE_LEN];
+    unsigned char* nonce = NULL;
+    allocate_and_store_buffer(cl_free_buf, socket, NONCE_LEN, &nonce);
     if (RAND_bytes(nonce, NONCE_LEN) != 1)
     {
-        std::cout << "Error generating nonce" << std::endl;
+        log_error("Error generating nonce");
         return -1;
     }
 
@@ -41,6 +41,7 @@ int send_message1(int socket)
 
     memcpy(message, payload_size_byte, sizeof(int));
     memcpy((unsigned char *)&message[sizeof(int)], nonce, NONCE_LEN);
+    // vedere con il cast in unsigned char di username funziona (da char a unsigned char)
     memcpy((unsigned char *)&message[sizeof(int) + NONCE_LEN], username.c_str(), username.size());
 
     // Send message
@@ -49,11 +50,237 @@ int send_message1(int socket)
     if (bytes_sent < 0)
     {
         free_allocated_buffers(cl_free_buf);
-        std::cout << "Error sending message" << std::endl;
+        log_error("Error sending message");
         return -1;
     }
 
     return 0;
+}
+
+int receive_message1(int socket)
+{
+    int payload_len, user_len, ret;
+    unsigned char *username, *nonce;
+    unsigned char *payload_len_byte;
+    char *abs_path;
+
+    abs_path = (char *)malloc(MAX_PATH);
+    getcwd(abs_path, MAX_PATH);
+
+    //	READ PAYLOAD_LEN
+    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &payload_len_byte);
+    if ((ret = recv_all(socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
+    {
+        log_error("Failed to read payload length");
+        free_allocated_buffers(sv_free_buf);
+        close(socket);
+        return -1;
+    }
+
+    // Deserializzazione di payload_len_byte
+    memcpy(&payload_len, payload_len_byte, sizeof(int));
+
+    //	READ USER & NONCE
+    user_len = payload_len - NONCE_LEN;
+
+    allocate_and_store_buffer(sv_free_buf, socket, user_len, &username);
+    allocate_and_store_buffer(sv_free_buf, socket, NONCE_LEN, &nonce);
+
+    // pensare ad una lista di nonce da controllare per evitare il replay attack
+    if ((ret = recv_all(socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
+    {
+        log_error("Failed to receive the nonce");
+        free_allocated_buffers(sv_free_buf);
+        close(socket);
+        return -1;
+    }
+
+    if ((ret = recv_all(socket, (void *)username, user_len)) != user_len)
+    {
+        log_error("Failed to receive the username");
+        free_allocated_buffers(sv_free_buf);
+        close(socket);
+        return -1;
+    }
+
+    //	CHECK USERNAME
+    string username_str(reinterpret_cast<char *>(username));
+    string dir_name = strncat(abs_path, "/server_src/", strlen("/server_src/"));
+
+    DIR *dir;
+    struct dirent *en;
+    int check = 0;
+    dir = opendir(dir_name.c_str());
+    if (dir)
+    {
+        while ((en = readdir(dir)) != NULL)
+        {
+            if (!strncmp(en->d_name, username_str.c_str(), username_str.size() + 1))
+                check = 1;
+        }
+    }
+    closedir(dir);
+    if (check == 0)
+    {
+        log_error("Username not found...");
+        free_allocated_buffers(sv_free_buf);
+        close(socket);
+        return -1;
+    }
+}
+
+// VERSIONE ALTERNATIVA receive_message1
+
+// int receive_message1(int socket)
+// {
+
+//     // Read payload length
+//     int payload_len;
+//     if (recv(socket, &payload_len, sizeof(payload_len), 0) != sizeof(payload_len)) {
+//         std::cerr << "Failed to read payload length" << std::endl;
+//         return -1;
+//     }
+
+//     // Read username and nonce
+//     std::vector<unsigned char> buf(payload_len);
+//     if (recv(socket, buf.data(), buf.size(), 0) != buf.size()) {
+//         std::cerr << "Failed to read payload" << std::endl;
+//         return -1;
+//     }
+
+//     const unsigned char* nonce = buf.data();
+//     const unsigned char* username = buf.data() + NONCE_LEN;
+//     const int username_len = payload_len - NONCE_LEN;
+
+//     // Check username
+//     std::string username_str(reinterpret_cast<const char*>(username), username_len);
+//     std::string dir_name = "/server_src/";
+//     char abs_path[MAX_PATH];
+//     if (getcwd(abs_path, MAX_PATH) == nullptr) {
+//         std::cerr << "Failed to get current directory" << std::endl;
+//         return -1;
+//     }
+//     dir_name = std::strcat(abs_path, dir_name.c_str());
+
+//     DIR* dir = opendir(dir_name.c_str());
+//     if (dir == nullptr) {
+//         std::cerr << "Failed to open directory" << std::endl;
+//         return -1;
+//     }
+
+//     bool check = false;
+//     while (const dirent* en = readdir(dir)) {
+//         if (std::strncmp(en->d_name, username_str.c_str(), username_len) == 0) {
+//             check = true;
+//             break;
+//         }
+//     }
+//     closedir(dir);
+
+//     if (!check) {
+//         std::cerr << "Username not found" << std::endl;
+//         return -1;
+//     }
+
+//     // Success
+//     return 0;
+// }
+
+// int receive_message1(int socket)
+// {
+
+//     // Read payload length
+//     int payload_len;
+//     if (recv(socket, &payload_len, sizeof(payload_len), 0) != sizeof(payload_len)) {
+//         std::cerr << "Failed to read payload length" << std::endl;
+//         return -1;
+//     }
+
+//     // Read username and nonce
+//     std::vector<unsigned char> buf(payload_len);
+//     if (recv(socket, buf.data(), buf.size(), 0) != buf.size()) {
+//         std::cerr << "Failed to read payload" << std::endl;
+//         return -1;
+//     }
+
+//     const unsigned char* nonce = buf.data();
+//     const unsigned char* username = buf.data() + NONCE_LEN;
+//     const int username_len = payload_len - NONCE_LEN;
+
+//     // Check username
+//     std::string username_str(reinterpret_cast<const char*>(username), username_len);
+//     std::string dir_name = "/server_src/";
+//     char abs_path[MAX_PATH];
+//     if (getcwd(abs_path, MAX_PATH) == nullptr) {
+//         std::cerr << "Failed to get current directory" << std::endl;
+//         return -1;
+//     }
+//     dir_name = std::strcat(abs_path, dir_name.c_str());
+
+//     DIR* dir = opendir(dir_name.c_str());
+//     if (dir == nullptr) {
+//         std::cerr << "Failed to open directory" << std::endl;
+//         return -1;
+//     }
+
+//     bool check = false;
+//     while (const dirent* en = readdir(dir)) {
+//         if (std::strncmp(en->d_name, username_str.c_str(), username_len) == 0) {
+//             check = true;
+//             break;
+//         }
+//     }
+//     closedir(dir);
+
+//     if (!check) {
+//         std::cerr << "Username not found" << std::endl;
+//         return -1;
+//     }
+
+//     // Success
+//     return 0;
+// }
+
+
+int send_message2(int socket, EVP_PKEY* client_public_key, unsigned char *nonceC)
+{
+    char *abs_path;
+    abs_path = (char *)malloc(MAX_PATH);
+    getcwd(abs_path, MAX_PATH);
+    std::string path = std::string(abs_path) + "/server_src/cert/servercert.pem";
+
+    // Carica il certificato
+    X509 *certificate = nullptr;
+    if (load_certificate(path, &certificate) != 0) {
+        std::cerr << "Failed to load the certificate" << std::endl;
+        return -1;
+    }
+
+    // Serializza il certificato usando i2d_X509
+    unsigned char *buffer = nullptr;
+    int cert_len = i2d_X509(certificate, &buffer);
+    if (cert_len < 0) {
+        log_error("Failed to serialize the certificate");
+        free_allocated_buffers(sv_free_buf);
+        return -1;
+    }
+
+    unsigned char *cert_len_byte = nullptr;
+    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &cert_len_byte);
+    serialize_int(cert_len, cert_len_byte);
+    
+    unsigned char *nonceS = nullptr;
+    allocate_and_store_buffer(sv_free_buf, socket, NONCE_LEN, &nonceS);
+    if (RAND_bytes(nonceS, NONCE_LEN) != 1)
+    {
+        log_error("Error generating nonce");
+        return -1;
+    }
+
+    // Libera le risorse
+    X509_free(certificate);
+    OPENSSL_free(buffer);
+    free(abs_path);
 }
 
 // int send_message2(int socket, std::string username, X509* certificate, EVP_PKEY* server_private_key, unsigned char nonceC[])
