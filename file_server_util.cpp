@@ -9,7 +9,7 @@ void deleteIfNotNull(T toCheck)
     }
 }
 
-bool isRegistered(std::string_view const &username, std::string_view const &password)
+bool isRegistered(std::string_view const &username)
 {
     std::string line;
     std::string word;
@@ -26,14 +26,9 @@ bool isRegistered(std::string_view const &username, std::string_view const &pass
     {
         std::stringstream str(line);
 
-        while (getline(str, word, ','))
+        while (getline(str, word))
         {
-            if (word.compare(username) != 0)
-            {
-                continue;
-            }
-            getline(str, word, ',');
-            if (word.compare(password) == 0)
+            if (word.compare(username) == 0)
             {
                 return true;
             }
