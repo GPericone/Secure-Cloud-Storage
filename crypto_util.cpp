@@ -4,10 +4,6 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
-void log_error(const std::string &msg) {
-    std::cerr << "Error: " << msg << std::endl;
-}
-
 /**
  * Loads a certificate from file.
  *
@@ -147,6 +143,17 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     return 0;
 }
 
+/**
+ * @brief Loads a public key from the specified PEM file.
+ *
+ * This function attempts to open and read a public key from the specified PEM file.
+ * If the file cannot be opened or the public key cannot be read, an error message
+ * is displayed, and the function returns nullptr.
+ *
+ * @param public_key_file Pointer to a null-terminated string containing the path to the PEM file with the public key.
+ *
+ * @return                Pointer to an EVP_PKEY structure containing the public key, or nullptr in case of errors.
+ */
 EVP_PKEY *load_public_key(const char *public_key_file)
 {
     FILE *pub_key_file = fopen(public_key_file, "r");
@@ -168,10 +175,123 @@ EVP_PKEY *load_public_key(const char *public_key_file)
 }
 
 // --------------------------------------------------------------------------
-// AES-128 GCM
+// DIGITAL SIGNATURE
+// --------------------------------------------------------------------------
+/**
+ * @brief Creates a digital signature for the given data using the provided private key.
+ *
+ * This function creates a digital signature for the given data using the SHA-256
+ * digest algorithm and the provided private key. The signature is generated using
+ * the EVP_Sign* family of functions from the OpenSSL library.
+ *
+ * @param private_key Pointer to an EVP_PKEY structure containing the private key used for signing.
+ * @param data        Pointer to the unsigned char array containing the data to be signed.
+ * @param data_len    Integer representing the length of the data in bytes.
+ * @param signature   Pointer to the unsigned char array where the generated signature will be stored.
+ *
+ * @return            Integer representing the length of the generated signature in bytes, or -1 in case of errors.
+ */
+int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, int data_len, unsigned char *signature)
+{
+    const EVP_MD *digest = EVP_sha256();
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    unsigned int signature_len = 0;
+    int ret;
+
+    if (!ctx)
+    {
+        log_error("Failed to create digital signature context");
+        return -1;
+    }
+
+    ret = EVP_SignInit(ctx, digest);
+    if (ret != 1)
+    {
+        log_error("Failed to initialize digital signature context");
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    ret = EVP_SignUpdate(ctx, data, data_len);
+    if (ret != 1)
+    {
+        log_error("Failed to update digital signature context");
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    ret = EVP_SignFinal(ctx, signature, &signature_len, private_key);
+    if (ret != 1)
+    {
+        log_error("Failed to finalize digital signature");
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_MD_CTX_free(ctx);
+    return signature_len;
+}
+
+/**
+ * @brief Verifies a digital signature using a public key.
+ *
+ * This function verifies a digital signature using a given public key, signature, and data.
+ * The function computes the SHA-256 hash of the data and checks if the signature matches the hash.
+ *
+ * @param public_key      Pointer to the EVP_PKEY structure containing the public key.
+ * @param signature       Pointer to an unsigned char array containing the signature.
+ * @param signature_len   Length of the signature array.
+ * @param data            Pointer to an unsigned char array containing the data to verify.
+ * @param data_len        Length of the data array.
+ *
+ * @return                Returns 1 if the signature is successfully verified, -1 in case of errors.
+ */
+int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signature, int signature_len, const unsigned char *data, int data_len)
+{
+    const EVP_MD *digest = EVP_sha256();
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    int ret;
+
+    if (!ctx)
+    {
+        log_error("Failed to create digital signature context");
+        return -1;
+    }
+
+    ret = EVP_VerifyInit(ctx, digest);
+    if (ret != 1)
+    {
+        log_error("Failed to initialize digital signature context");
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    ret = EVP_VerifyUpdate(ctx, data, data_len);
+    if (ret != 1)
+    {
+        log_error("Failed to update digital signature context");
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    ret = EVP_VerifyFinal(ctx, signature, signature_len, public_key);
+    if (ret != 1)
+    {
+        std::cerr << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        EVP_MD_CTX_free(ctx);
+        return -1;
+    }
+
+    EVP_MD_CTX_free(ctx);
+    std::cout << "Signature verified successfully" << std::endl;
+    return ret;
+}
+
+// --------------------------------------------------------------------------
+// AES-256 GCM
 // --------------------------------------------------------------------------
 
-const EVP_CIPHER *cipher = EVP_aes_128_gcm();
+const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
 /**
  * Encrypts the plaintext using the AES-GCM encryption algorithm and returns the ciphertext and tag.
@@ -251,7 +371,25 @@ int aesgcm_encrypt(unsigned char *plaintext,
 
     return ciphertext_len;
 }
-
+/**
+ * @brief Decrypts an AES-GCM ciphertext and verifies its authenticity.
+ *
+ * This function decrypts an AES-GCM encrypted ciphertext using the provided key, IV, and
+ * authentication tag. It also processes additional authenticated data (AAD) if provided.
+ * The function uses the EVP_Decrypt* family of functions from the OpenSSL library for decryption.
+ *
+ * @param ciphertext    Pointer to the unsigned char array containing the ciphertext to be decrypted.
+ * @param ciphertext_len Integer representing the length of the ciphertext in bytes.
+ * @param aad           Pointer to the unsigned char array containing the additional authenticated data (AAD).
+ * @param aad_len       Integer representing the length of the AAD in bytes.
+ * @param tag           Pointer to the unsigned char array containing the authentication tag.
+ * @param key           Pointer to the unsigned char array containing the decryption key.
+ * @param iv            Pointer to the unsigned char array containing the initialization vector (IV).
+ * @param iv_len        Integer representing the length of the IV in bytes.
+ * @param plaintext     Pointer to the unsigned char array where the decrypted plaintext will be stored.
+ *
+ * @return              Integer representing the length of the decrypted plaintext in bytes, or -1 in case of errors or authentication failure.
+ */
 int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
                    unsigned char *aad, int aad_len,
                    unsigned char *tag,
@@ -326,7 +464,24 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 // --------------------------------------------------------------------------
 // DIGITAL ENVELOPE
 // --------------------------------------------------------------------------
-
+/**
+ * @brief Encrypts a plaintext using envelope encryption with a public key.
+ *
+ * This function performs envelope encryption on the given plaintext using the provided public key.
+ * It generates a random symmetric key and initialization vector (IV) for encryption and encrypts the
+ * symmetric key using the public key. The function uses the EVP_Seal* family of functions from the
+ * OpenSSL library for encryption.
+ *
+ * @param public_key    Pointer to the EVP_PKEY structure containing the public key for envelope encryption.
+ * @param plaintext     Pointer to the unsigned char array containing the plaintext to be encrypted.
+ * @param pt_len        Integer representing the length of the plaintext in bytes.
+ * @param sym_key_enc   Pointer to the unsigned char array where the encrypted symmetric key will be stored.
+ * @param sym_key_len   Integer representing the length of the encrypted symmetric key in bytes.
+ * @param iv            Pointer to the unsigned char array where the generated initialization vector (IV) will be stored.
+ * @param ciphertext    Pointer to the unsigned char array where the encrypted ciphertext will be stored.
+ *
+ * @return              Integer representing the length of the encrypted ciphertext in bytes, or -1 in case of errors.
+ */
 int envelope_encrypt(EVP_PKEY *public_key,
                      unsigned char *plaintext,
                      int pt_len,
@@ -370,7 +525,7 @@ int envelope_encrypt(EVP_PKEY *public_key,
     ret = EVP_SealFinal(ctx, ciphertext + ciphertext_len, &len);
     if (ret != 1)
     {
-        log_error("seal final contesto fallito");
+        log_error("An error occurred during the seal finalization");
         return -1;
     }
 
@@ -380,7 +535,22 @@ int envelope_encrypt(EVP_PKEY *public_key,
 
     return ciphertext_len;
 }
-
+/**
+ * @brief Decrypts a ciphertext using envelope encryption and the given private key.
+ *
+ * This function performs envelope decryption of the ciphertext using the provided private key,
+ * encrypted symmetric key, and initialization vector (IV). The decrypted plaintext is then returned.
+ *
+ * @param private_key   Pointer to the EVP_PKEY structure containing the private key.
+ * @param ciphertext    Pointer to an unsigned char array containing the ciphertext to decrypt.
+ * @param ct_len        Length of the ciphertext array.
+ * @param sym_key_enc   Pointer to an unsigned char array containing the encrypted symmetric key.
+ * @param sym_key_len   Length of the encrypted symmetric key array.
+ * @param iv            Pointer to an unsigned char array containing the initialization vector.
+ * @param plaintext     Pointer to an unsigned char array that will hold the decrypted plaintext.
+ *
+ * @return              Returns the length of the decrypted plaintext if successful, or -1 in case of errors.
+ */
 int envelope_decrypt(EVP_PKEY *private_key,
                      unsigned char *ciphertext,
                      int ct_len,
@@ -398,7 +568,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (!ctx)
     {
-        log_error("creazione contesto fallita");
+        log_error("An error occurred during the creation of the context");
         return -1;
     }
 
@@ -406,7 +576,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
     if (ret != 1)
     {
-        log_error("open init contesto fallito");
+        log_error("An error occurred during the open initialization");
         return -1;
     }
 
@@ -414,7 +584,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenUpdate(ctx, plaintext, &outlen, ciphertext, ct_len);
     if (ret != 1)
     {
-        log_error("open update contesto fallito");
+        log_error("An error occurred during the open update");
         return -1;
     }
     plaintext_len += outlen;
@@ -422,7 +592,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
     ret = EVP_OpenFinal(ctx, plaintext + plaintext_len, &outlen);
     if (ret != 1)
     {
-        log_error("open final contesto fallito");
+        log_error("An error occurred during the open final");
         return -1;
     }
 

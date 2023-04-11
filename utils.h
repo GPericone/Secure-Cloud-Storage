@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <dirent.h>
+#include <list>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -21,12 +22,14 @@
 
 using namespace std;
 
-//#define USERNAMESIZE 25
-//#define NONCE_LEN 16
+// #define USERNAMESIZE 25
+// #define NONCE_LEN 16
 
 const int MAX_BUF_SIZE = 65536;
 const size_t MAX_PATH = 512;
 const size_t NONCE_LEN = 16;
+const size_t TAG_LEN = 16;
+const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const size_t USERNAMESIZE = 25;
 
 // extern int cl_index_free_buf;
@@ -34,12 +37,45 @@ extern unsigned char *cl_free_buf[MAX_BUF_SIZE] = {0};
 // extern int sv_index_free_buf;
 extern unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
 
+// NONCE LIST
+class NonceList {
+private:
+    std::list<unsigned char*> nonce_list;
+
+    // Compare two nonces
+    static bool compare_nonces(const unsigned char* a, const unsigned char* b) {
+        return std::strcmp(reinterpret_cast<const char*>(a), reinterpret_cast<const char*>(b)) == 0;
+    }
+
+public:
+    // Insert a nonce into the list
+    void insert(const unsigned char* nonce) {
+        unsigned char* nonce_copy = new unsigned char[std::strlen(reinterpret_cast<const char*>(nonce)) + 1];
+        std::strcpy(reinterpret_cast<char*>(nonce_copy), reinterpret_cast<const char*>(nonce));
+        nonce_list.push_back(nonce_copy);
+    }
+
+    // Check if a nonce is in the list
+    bool contains(const unsigned char* nonce) const {
+        for (const unsigned char* stored_nonce : nonce_list) {
+            if (compare_nonces(stored_nonce, nonce)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ~NonceList() {
+        for (unsigned char* nonce : nonce_list) {
+            delete[] nonce;
+        }
+    }
+};
+
 // MEMORY HANDLER
 
-// void free_var(int side);
-// void memory_handler(int side, int socket, int new_size, unsigned char **new_buf);
 void free_allocated_buffers(unsigned char *buffer_array[]);
-int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, int new_size, unsigned char **new_buf_ptr);
+int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr);
 void serialize_int(int val, unsigned char *c);
 void serialize_longint(long int val, unsigned char *c);
 
@@ -54,7 +90,12 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
 EVP_PKEY *load_public_key(const char *public_key_file);
 
-// AES-128 GCM
+// DIGITAL SIGNATURE
+
+int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, int data_len, unsigned char *signature);
+int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signature, int signature_len, const unsigned char *data, int data_len);
+
+// AES-GCM 256
 
 int aesgcm_encrypt(unsigned char *plaintext, int plaintext_len,
                    unsigned char *aad, int aad_len,

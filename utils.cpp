@@ -1,5 +1,19 @@
 #include "utils.h"
 
+void log_error(const std::string &msg)
+{
+    std::cerr << "Error: " << msg << std::endl;
+}
+
+/**
+ * @brief Frees all allocated buffers in the given buffer array.
+ * 
+ * This function iterates through the buffer array and frees all non-null buffers.
+ * It also sets their entries in the array to nullptr. The function displays the
+ * number of freed buffers upon completion.
+ *
+ * @param buffer_array Pointer to an array of unsigned char pointers, containing the buffers to be freed.
+ */
 void free_allocated_buffers(unsigned char *buffer_array[])
 {
     int counter = 0;
@@ -15,6 +29,21 @@ void free_allocated_buffers(unsigned char *buffer_array[])
     std::cout << "Freed " << counter << " allocated buffers" << std::endl;
 }
 
+/**
+ * @brief Allocates a new buffer of the specified size and stores it in the given buffer array.
+ * 
+ * This function allocates a new buffer of the specified size, initializes it to zero, and stores
+ * it in the given buffer array. The new buffer's pointer is returned via the new_buf_ptr parameter.
+ * If the buffer array is full or memory allocation fails, the function frees all allocated buffers,
+ * closes the specified socket, and terminates the program with an error message.
+ *
+ * @param buffer_array Pointer to an array of unsigned char pointers, where the new buffer will be stored.
+ * @param socket       Socket to close if an error occurs during buffer allocation or storage.
+ * @param new_size     Size of the new buffer to be allocated.
+ * @param new_buf_ptr  Pointer to an unsigned char pointer, which will be set to the address of the new buffer.
+ *
+ * @return             Index of the new buffer in the buffer array, or -1 in case of errors.
+ */
 int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr)
 {
     if (buffer_array == NULL)
