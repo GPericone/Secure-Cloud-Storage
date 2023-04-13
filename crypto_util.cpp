@@ -174,6 +174,27 @@ EVP_PKEY *load_public_key(const char *public_key_file)
     return public_key;
 }
 
+// TODO: Forse serve
+// EVP_PKEY *load_public_key(const char *public_key_file, const char *password)
+// {
+//     FILE *pub_key_file = fopen(public_key_file, "r");
+//     if (!pub_key_file)
+//     {
+//         std::cerr << "Error opening public key file: " << public_key_file << std::endl;
+//         return nullptr;
+//     }
+
+//     EVP_PKEY *public_key = PEM_read_PUBKEY(pub_key_file, nullptr, (pem_password_cb*)password, nullptr);
+//     fclose(pub_key_file);
+
+//     if (!public_key)
+//     {
+//         std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
+//     }
+
+//     return public_key;
+// }
+
 // --------------------------------------------------------------------------
 // DIGITAL SIGNATURE
 // --------------------------------------------------------------------------

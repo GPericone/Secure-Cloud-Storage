@@ -149,7 +149,7 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
 
     char abs_path[MAX_PATH];
     getcwd(abs_path, MAX_PATH);
-    std::string path = std::string(abs_path) + "/server_src/cert/servercert.pem";
+    std::string path = std::string(abs_path) + "/server_file/cert/server_cert.pem";
 
     // Load the certificate
     X509 *certificate = nullptr;
