@@ -72,6 +72,13 @@ public:
     }
 };
 
+struct Session {
+    unsigned char username;
+    unsigned char nonce;
+    unsigned char aes_key;
+    int socket;
+};
+
 // MEMORY HANDLER
 
 void free_allocated_buffers(unsigned char *buffer_array[]);
@@ -128,5 +135,17 @@ int envelope_decrypt(EVP_PKEY *private_key,
                      int sym_key_len,
                      unsigned char *iv,
                      unsigned char *plaintext);
-
 #endif
+
+
+// #include <map>
+
+// // Crea una mappa per indicizzare le sessioni per nome utente
+// std::map<unsigned char, Sessione> sessioni;
+
+// // Aggiungi una sessione alla mappa
+// Sessione miaSessione = { 'user123', 'nonce123', 'aeskey123', 123 };
+// sessioni[miaSessione.username] = miaSessione;
+
+// // Accedi alla sessione per nome utente
+// Sessione sessioneUtente = sessioni['user123'];
