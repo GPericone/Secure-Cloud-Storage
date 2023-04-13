@@ -9,35 +9,6 @@ void deleteIfNotNull(T toCheck)
     }
 }
 
-bool isRegistered(std::string_view const &username)
-{
-    std::string line;
-    std::string word;
-
-    std::fstream file(F_NAME, std::ios::in);
-
-    if (!file.is_open())
-    {
-        std::cerr << "Could not open the file\n";
-        exit(-1);
-    }
-
-    while (getline(file, line))
-    {
-        std::stringstream str(line);
-
-        while (getline(str, word))
-        {
-            if (word.compare(username) == 0)
-            {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 std::string get_file_size(std::string const &path)
 {
     int i{};

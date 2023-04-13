@@ -116,7 +116,11 @@ int receive_message1(int socket, NonceList nonce_list)
     }
 
     // Check username
-    // TODO: check username using isAuthenticated function
+    if(!isRegistered((char *)username))
+    {
+        log_error("User not registered");
+        return -1;
+    }
 
     return 0;
 }

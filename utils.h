@@ -8,6 +8,11 @@
 #include <cstring>
 #include <dirent.h>
 #include <list>
+#include <filesystem>
+#include <fstream>
+#include <dirent.h>
+#include <sstream>
+#include <map>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -31,11 +36,20 @@ const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
 const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const size_t USERNAMESIZE = 25;
+const std::string F_NAME = "users.csv";
 
 // extern int cl_index_free_buf;
 extern unsigned char *cl_free_buf[MAX_BUF_SIZE] = {0};
 // extern int sv_index_free_buf;
 extern unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
+
+// SESSION STRUCT
+struct Session {
+    unsigned char username;
+    unsigned char nonce;
+    unsigned char aes_key;
+    int socket;
+};
 
 // NONCE LIST
 class NonceList {
@@ -72,12 +86,8 @@ public:
     }
 };
 
-struct Session {
-    unsigned char username;
-    unsigned char nonce;
-    unsigned char aes_key;
-    int socket;
-};
+// USER 
+bool isRegistered(std::string_view username);
 
 // MEMORY HANDLER
 

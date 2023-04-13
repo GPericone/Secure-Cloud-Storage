@@ -165,3 +165,32 @@ int recv_all(int socket, void *buffer, ssize_t len)
         return len - bytes_left;
     }
 }
+
+bool isRegistered(std::string_view username)
+{
+    std::string line;
+    std::string word;
+
+    std::fstream file(F_NAME, std::ios::in);
+
+    if (!file.is_open())
+    {
+        log_error("Could not open the file\n");
+        return false;
+    }
+
+    while (getline(file, line))
+    {
+        std::stringstream str(line);
+
+        while (getline(str, word, ' '))
+        {
+            if (word.compare(username) == 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
