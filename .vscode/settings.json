@@ -1,8 +1,0 @@
-{
-    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
-    "files.associations": {
-        "iostream": "cpp",
-        "iosfwd": "cpp",
-        "istream": "cpp"
-    }
-}
