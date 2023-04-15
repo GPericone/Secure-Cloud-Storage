@@ -12,7 +12,7 @@
  * @param socket The socket through which the message will be sent.
  * @return 0 on success, -1 on failure.
  */
-int send_message1(int socket)
+int send_message1(Session *client_session)
 {
     // Prompt the user for their username
     std::string username;
@@ -25,26 +25,30 @@ int send_message1(int socket)
         return -1;
     }
 
+    client_session->username = username;
+
     // Generate a client nonce
-    unsigned char *nonce = NULL;
-    allocate_and_store_buffer(cl_free_buf, socket, NONCE_LEN, &nonce);
+    unsigned char *nonce = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, NONCE_LEN, &nonce);
     if (RAND_bytes(nonce, NONCE_LEN) != 1)
     {
         log_error("Error generating nonce");
         return -1;
     }
 
+    memcpy(client_session->nonceClient, nonce, NONCE_LEN);
+
     // Calculate payload size
     unsigned char *payload_size_byte, *message;
     int payload_size = username.size() + NONCE_LEN;
 
     // Create message buffer
-    allocate_and_store_buffer(cl_free_buf, socket, sizeof(int), &payload_size_byte);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &payload_size_byte);
     serialize_int(payload_size, payload_size_byte);
 
     // Serialize payload size and copy into message buffer
     int message_size = sizeof(int) + payload_size;
-    allocate_and_store_buffer(cl_free_buf, socket, message_size, &message);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
 
     // Copy nonce and username into message buffer
     memcpy(message, payload_size_byte, sizeof(int));
@@ -52,7 +56,7 @@ int send_message1(int socket)
     memcpy(message + sizeof(int) + NONCE_LEN, username.c_str(), username.size());
 
     // Send message
-    int bytes_sent = send(socket, message, message_size, 0);
+    int bytes_sent = send(client_session->socket, message, message_size, 0);
 
     if (bytes_sent < 0)
     {
@@ -60,6 +64,7 @@ int send_message1(int socket)
         return -1;
     }
 
+    // TODO: Serve qui?
     free_allocated_buffers(cl_free_buf);
     return 0;
 }
@@ -74,15 +79,15 @@ int send_message1(int socket)
  * @param nonce_list The list of nonces received from the clients.
  * @return 0 on success, -1 on failure.
  */
-int receive_message1(int socket, NonceList nonce_list)
+int receive_message1(Session *server_session, NonceList nonce_list)
 {
     int payload_len, user_len, ret;
     unsigned char *username, *nonce;
     unsigned char *payload_len_byte;
 
     // Read payload length
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &payload_len_byte);
-    if ((ret = recv_all(socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &payload_len_byte);
+    if ((ret = recv_all(server_session->socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read payload length");
         return -1;
@@ -93,10 +98,10 @@ int receive_message1(int socket, NonceList nonce_list)
 
     user_len = payload_len - NONCE_LEN;
 
-    allocate_and_store_buffer(sv_free_buf, socket, user_len, &username);
-    allocate_and_store_buffer(sv_free_buf, socket, NONCE_LEN, &nonce);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, user_len, &username);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &nonce);
 
-    if ((ret = recv_all(socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
+    if ((ret = recv_all(server_session->socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
     {
         log_error("Failed to receive the nonce");
         return -1;
@@ -109,18 +114,29 @@ int receive_message1(int socket, NonceList nonce_list)
         return -1;
     }
 
-    if ((ret = recv_all(socket, (void *)username, user_len)) != user_len)
+    // Add nonce to nonce list
+    nonce_list.insert(nonce);
+
+    // Add nonce to server session
+    memcpy(server_session->nonceClient, nonce, NONCE_LEN);
+
+    // Read username
+    if ((ret = recv_all(server_session->socket, (void *)username, user_len)) != user_len)
     {
         log_error("Failed to receive the username");
         return -1;
     }
 
+    std::string username_str = std::string(reinterpret_cast<char*>(username), user_len);
+
     // Check username
-    if(!isRegistered((char *)username))
+    if(!isRegistered(username_str))
     {
         log_error("User not registered");
         return -1;
     }
+
+    server_session->username = username_str;
 
     return 0;
 }
@@ -140,15 +156,8 @@ int receive_message1(int socket, NonceList nonce_list)
  * @param nonceC The client's nonce, included in the message for replay attack protection.
  * @return 0 on success, -1 on failure.
  */
-int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key, unsigned char *nonceC)
+int send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key)
 {
-    // Check for valid input parameters
-    if (!client_public_key || !server_private_key || !nonceC)
-    {
-        log_error("Invalid input parameters");
-        return -1;
-    }
-
     // CERTIFICATE
 
     char abs_path[MAX_PATH];
@@ -173,25 +182,28 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
     }
 
     unsigned char *cert_len_byte = nullptr;
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &cert_len_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &cert_len_byte);
     serialize_int(cert_len, cert_len_byte);
 
     // NONCE
 
     // Generate a server nonce
     unsigned char *nonceS = nullptr;
-    allocate_and_store_buffer(sv_free_buf, socket, NONCE_LEN, &nonceS);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &nonceS);
     if (RAND_bytes(nonceS, NONCE_LEN) != 1)
     {
         log_error("Error generating nonce");
         return -1;
     }
 
+    // Add nonce to server session
+    memcpy(server_session->nonceServer, nonceS, NONCE_LEN);
+
     // SESSION KEY
 
     // Generate an AES key for session communications
     unsigned char *plaintext = nullptr;
-    allocate_and_store_buffer(sv_free_buf, socket, EVP_CIPHER_key_length(EVP_aes_256_gcm()), &plaintext);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_CIPHER_key_length(EVP_aes_256_gcm()), &plaintext);
 
     if (!RAND_bytes(plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm())))
     {
@@ -199,14 +211,17 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
         return -1;
     }
 
+    // Add session key to server session
+    memcpy(server_session->aes_key, plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm()));
+
     // DIGITAL ENVELOPE
 
     // Allocate buffers for the ciphertext, envelope IV, and encrypted envelope key.
     unsigned char *ciphertext = nullptr;
     unsigned char *envelope_iv = nullptr;
     unsigned char *encrypted_envelope_key = nullptr;
-    allocate_and_store_buffer(sv_free_buf, socket, EVP_CIPHER_key_length(EVP_aes_256_gcm()) + EVP_CIPHER_block_size(EVP_aes_256_cbc()), &ciphertext);
-    allocate_and_store_buffer(sv_free_buf, socket, EVP_CIPHER_iv_length(EVP_aes_256_cbc()), &envelope_iv);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_CIPHER_key_length(EVP_aes_256_gcm()) + EVP_CIPHER_block_size(EVP_aes_256_cbc()), &ciphertext);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_CIPHER_iv_length(EVP_aes_256_cbc()), &envelope_iv);
     int encrypted_envelope_key_len = 0;
 
     // Create the digital envelope
@@ -222,13 +237,13 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
     // Allocate a buffer for the signature and
     unsigned char *to_sign = nullptr;
     unsigned char *ciphertext_len_byte, *encrypted_envelope_key_len_byte;
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &ciphertext_len_byte);
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &encrypted_envelope_key_len_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &ciphertext_len_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &encrypted_envelope_key_len_byte);
     // TO_SIGN STRUCTURE: ciphertext_len | ciphertext | encrypted_envelope_key_len | encrypted_envelope_key | envelope_iv | nonceC
     serialize_int(ciphertext_len, ciphertext_len_byte);
     serialize_int(encrypted_envelope_key_len, encrypted_envelope_key_len_byte);
-    int to_sign_len = sizeof(int) + ciphertext_len + sizeof(int) + encrypted_envelope_key_len + EVP_CIPHER_iv_length(EVP_aes_256_cbc()) + sizeof(nonceC);
-    allocate_and_store_buffer(sv_free_buf, socket, to_sign_len, &to_sign);
+    int to_sign_len = sizeof(int) + ciphertext_len + sizeof(int) + encrypted_envelope_key_len + EVP_CIPHER_iv_length(EVP_aes_256_cbc()) + NONCE_LEN;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, to_sign_len, &to_sign);
 
     // Copy the data to the to_sign buffer
     memcpy(to_sign, ciphertext_len_byte, sizeof(int));
@@ -236,13 +251,13 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
     memcpy(to_sign + sizeof(int) + ciphertext_len, encrypted_envelope_key_len_byte, sizeof(int));
     memcpy(to_sign + sizeof(int) + ciphertext_len + sizeof(int), encrypted_envelope_key, encrypted_envelope_key_len);
     memcpy(to_sign + sizeof(int) + ciphertext_len + sizeof(int) + encrypted_envelope_key_len, envelope_iv, EVP_CIPHER_iv_length(EVP_aes_256_cbc()));
-    memcpy(to_sign + sizeof(int) + ciphertext_len + sizeof(int) + encrypted_envelope_key_len + EVP_CIPHER_iv_length(EVP_aes_256_cbc()), nonceC, sizeof(nonceC));
+    memcpy(to_sign + sizeof(int) + ciphertext_len + sizeof(int) + encrypted_envelope_key_len + EVP_CIPHER_iv_length(EVP_aes_256_cbc()), server_session->nonceClient, NONCE_LEN);
 
     // Create the digital signature
     unsigned char *signature = nullptr;
     // The signature length is the same as the private key length
     int signature_len = EVP_PKEY_size(server_private_key);
-    allocate_and_store_buffer(sv_free_buf, socket, signature_len, &signature);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, signature_len, &signature);
     int ret = create_digital_signature(server_private_key, to_sign, to_sign_len, signature);
     if (ret <= 0)
     {
@@ -267,18 +282,18 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
 
     // PAYLOAD STRUCTURE: cert len | certificate | to sign len | to sign | signature len | signature | nonceS
     unsigned char *to_sign_len_byte, *signature_len_byte, *payload_size_byte, *message;
-    size_t payload_size = sizeof(int) + cert_len + to_sign_len + signature_len + sizeof(nonceS);
+    size_t payload_size = sizeof(int) + cert_len + to_sign_len + signature_len + NONCE_LEN;
 
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &payload_size_byte);
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &to_sign_len_byte);
-    allocate_and_store_buffer(sv_free_buf, socket, sizeof(int), &signature_len_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &payload_size_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &to_sign_len_byte);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &signature_len_byte);
     serialize_int(payload_size, payload_size_byte);
     serialize_int(to_sign_len, to_sign_len_byte);
     serialize_int(signature_len, signature_len_byte);
 
     // Allocate the message buffer
     size_t message_size = payload_size + sizeof(int);
-    allocate_and_store_buffer(sv_free_buf, socket, message_size, &message);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, message_size, &message);
 
     // Copy the data to the message buffer
     memcpy(message, payload_size_byte, sizeof(int));
@@ -291,7 +306,7 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
     memcpy(message + sizeof(int) + sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int) + signature_len, nonceS, NONCE_LEN);
 
     // Send the message
-    int bytes_sent = send(socket, message, message_size, 0);
+    int bytes_sent = send(server_session->socket, message, message_size, 0);
 
     if (bytes_sent < 0)
     {
@@ -323,7 +338,7 @@ int send_message2(int socket, EVP_PKEY *client_public_key, EVP_PKEY *server_priv
  * @return          Returns 0 if the message is successfully received, processed, and decrypted,
  *                  or -1 in case of errors.
  */
-int receive_message2(int socket, EVP_PKEY *client_private_key)
+int receive_message2(Session *client_session, EVP_PKEY *client_private_key)
 {
     int ret, payload_len, cert_len, envelope_len, signature_len;
     unsigned char *envelope, *signature, *nonceS;
@@ -332,8 +347,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // RECEIVE THE PAYLOAD
 
     unsigned char *payload_len_byte;
-    allocate_and_store_buffer(cl_free_buf, socket, sizeof(int), &payload_len_byte);
-    if ((ret = recv_all(socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &payload_len_byte);
+    if ((ret = recv_all(client_session->socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Error receiving payload length");
         return -1;
@@ -345,8 +360,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // RECEIVE THE CERTIFICATE
 
     unsigned char *cert_len_byte;
-    allocate_and_store_buffer(cl_free_buf, socket, sizeof(int), &cert_len_byte);
-    if ((ret = recv_all(socket, (void *)cert_len_byte, sizeof(int))) != sizeof(int))
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &cert_len_byte);
+    if ((ret = recv_all(client_session->socket, (void *)cert_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Error receiving certificate length");
         return -1;
@@ -356,8 +371,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     memcpy(&cert_len, cert_len_byte, sizeof(int));
 
     unsigned char *certficate_byte;
-    allocate_and_store_buffer(cl_free_buf, socket, cert_len, &certficate_byte);
-    if ((ret = recv_all(socket, (void *)certficate_byte, cert_len)) != cert_len)
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, cert_len, &certficate_byte);
+    if ((ret = recv_all(client_session->socket, (void *)certficate_byte, cert_len)) != cert_len)
     {
         log_error("Error receiving certificate");
         return -1;
@@ -374,8 +389,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // RECEIVE THE ENVELOPE
 
     unsigned char *envelope_len_byte;
-    allocate_and_store_buffer(cl_free_buf, socket, sizeof(int), &envelope_len_byte);
-    if ((ret = recv_all(socket, (void *)envelope_len_byte, sizeof(int))) != sizeof(int))
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &envelope_len_byte);
+    if ((ret = recv_all(client_session->socket, (void *)envelope_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Error receiving envelope length");
         return -1;
@@ -384,8 +399,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // Deserialize the envelope length
     memcpy(&envelope_len, envelope_len_byte, sizeof(int));
 
-    allocate_and_store_buffer(cl_free_buf, socket, envelope_len, &envelope);
-    if ((ret = recv_all(socket, (void *)envelope, envelope_len)) != envelope_len)
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, envelope_len, &envelope);
+    if ((ret = recv_all(client_session->socket, (void *)envelope, envelope_len)) != envelope_len)
     {
         log_error("Error receiving envelope");
         return -1;
@@ -394,8 +409,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // RECEIVE THE SIGNATURE
 
     unsigned char *signature_len_byte;
-    allocate_and_store_buffer(cl_free_buf, socket, sizeof(int), &signature_len_byte);
-    if ((ret = recv_all(socket, (void *)signature_len_byte, sizeof(int))) != sizeof(int))
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &signature_len_byte);
+    if ((ret = recv_all(client_session->socket, (void *)signature_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Error receiving signature length");
         return -1;
@@ -404,8 +419,8 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
     // Deserialize the signature length
     memcpy(&signature_len, signature_len_byte, sizeof(int));
 
-    allocate_and_store_buffer(cl_free_buf, socket, signature_len, &signature);
-    if ((ret = recv_all(socket, (void *)signature, signature_len)) != signature_len)
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, signature_len, &signature);
+    if ((ret = recv_all(client_session->socket, (void *)signature, signature_len)) != signature_len)
     {
         log_error("Error receiving signature");
         return -1;
@@ -413,12 +428,15 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
 
     // RECEIVE THE NONCE
 
-    allocate_and_store_buffer(cl_free_buf, socket, NONCE_LEN, &nonceS);
-    if ((ret = recv_all(socket, (void *)nonceS, NONCE_LEN)) != NONCE_LEN)
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, NONCE_LEN, &nonceS);
+    if ((ret = recv_all(client_session->socket, (void *)nonceS, NONCE_LEN)) != NONCE_LEN)
     {
         log_error("Error receiving nonce");
         return -1;
     }
+
+    // Copy the nonceS to the client session
+    memcpy(client_session->nonceServer, nonceS, NONCE_LEN);
 
     // CHECK THE CERTIFICATE
 
@@ -466,6 +484,7 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
         return -1;
     }
 
+    // Extract the public key from the certificate
     EVP_PKEY *server_public_key = X509_get_pubkey(certificate);
     if (server_public_key == nullptr)
     {
@@ -476,6 +495,9 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
         X509_STORE_free(store);
         return -1;
     }
+
+    // Copy the public key to the client session (Non dovrebbe essere necessario)
+    // client_session->pubkey = EVP_PKEY_dup(client_session->pubkey);
 
     // CHECK THE SIGNATURE
 
@@ -498,30 +520,37 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
 
     // Deserialize the envelope ciphertext
     memcpy(&envelope_ciphertext_len, envelope, sizeof(int));
-    allocate_and_store_buffer(cl_free_buf, socket, envelope_ciphertext_len, &envelope_ciphertext);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, envelope_ciphertext_len, &envelope_ciphertext);
     memcpy(envelope_ciphertext, envelope + sizeof(int), envelope_ciphertext_len);
 
     // Deserialize the envelope key
     memcpy(&envelope_key_len, envelope + sizeof(int) + envelope_ciphertext_len, sizeof(int));
-    allocate_and_store_buffer(cl_free_buf, socket, envelope_key_len, &envelope_key);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, envelope_key_len, &envelope_key);
     memcpy(&envelope_key, envelope + sizeof(int) + envelope_ciphertext_len + sizeof(int), envelope_key_len);
 
     // Deserialize the envelope IV
     memcpy(&envelope_iv_len, envelope + sizeof(int) + envelope_ciphertext_len + sizeof(int) + envelope_key_len, sizeof(int));
-    allocate_and_store_buffer(cl_free_buf, socket, envelope_iv_len, &envelope_iv);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, envelope_iv_len, &envelope_iv);
     memcpy(envelope_iv, envelope + sizeof(int) + envelope_ciphertext_len + sizeof(int) + envelope_key_len + sizeof(int), envelope_iv_len);
 
     // Deserialize the nonceC
-    allocate_and_store_buffer(cl_free_buf, socket, NONCE_LEN, &nonceC);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, NONCE_LEN, &nonceC);
     memcpy(nonceC, envelope + sizeof(int) + envelope_ciphertext_len + sizeof(int) + envelope_key_len + sizeof(int) + envelope_iv_len, NONCE_LEN);
 
-    // TODO: Check if nonceC is equal to the nonce sent before
+    if (memcmp(client_session->nonceClient, nonceC, NONCE_LEN))
+    {
+        log_error("Error: nonceC is not equal to the nonce sent before");
+        // Clean up resources before returning
+        X509_free(CA_certificate);
+        X509_CRL_free(crl);
+        X509_STORE_free(store);
+        EVP_PKEY_free(server_public_key);
+        return -1;
+    };
 
     // Decrypt the envelope
     unsigned char *envelope_plaintext;
     int envelope_plaintext_len;
-
-    // TODO:
 
     envelope_plaintext_len = envelope_decrypt(client_private_key, envelope_ciphertext, envelope_ciphertext_len, envelope_key, envelope_key_len, envelope_iv, envelope_plaintext);
     if (envelope_plaintext_len == -1)
@@ -535,7 +564,7 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
         return -1;
     }
 
-    // TODO: Salvo l'envelope_plaintext nella struttura Session (è la chiave di sessione)
+    memcpy(client_session->aes_key, envelope_plaintext, envelope_plaintext_len);
 
     // Clean up resources
 
@@ -560,25 +589,25 @@ int receive_message2(int socket, EVP_PKEY *client_private_key)
  *
  * @return 0 on success, -1 on error.
  */
-int send_message3(int socket, unsigned char *nonceS, unsigned char *aes_key)
+int send_message3(Session *client_session)
 {
     unsigned char *plaintext, *ciphertext, *tag, *aad, *iv;
     size_t aad_len = NONCE_LEN;
     // Dummy byte to avoid empty plaintext
     plaintext[0] = 1;
 
-    allocate_and_store_buffer(cl_free_buf, socket, aad_len, &aad);
-    allocate_and_store_buffer(cl_free_buf, socket, IV_LEN, &iv);
-    allocate_and_store_buffer(cl_free_buf, socket, TAG_LEN, &tag);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, aad_len, &aad);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, IV_LEN, &iv);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, TAG_LEN, &tag);
 
-    memcpy(aad, nonceS, aad_len);
+    memcpy(aad, client_session->nonceServer, aad_len);
     if (!RAND_bytes(iv, IV_LEN))
     {
         log_error("Error generating IV");
         return -1;
     }
 
-    int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, aad_len, aes_key, iv, IV_LEN, ciphertext, tag);
+    int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, aad_len, client_session->aes_key, iv, IV_LEN, ciphertext, tag);
 
     if (ciphertext_len < 0)
     {
@@ -590,7 +619,7 @@ int send_message3(int socket, unsigned char *nonceS, unsigned char *aes_key)
     unsigned char *message;
     size_t message_size = ciphertext_len + aad_len + TAG_LEN + IV_LEN;
 
-    allocate_and_store_buffer(cl_free_buf, socket, message_size, &message);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
     memcpy(message, ciphertext, ciphertext_len);
     memcpy(message + ciphertext_len, aad, aad_len);
     memcpy(message + ciphertext_len + aad_len, tag, TAG_LEN);
@@ -598,7 +627,7 @@ int send_message3(int socket, unsigned char *nonceS, unsigned char *aes_key)
 
     // Send the message
 
-    int bytes_sent = send(socket, message, message_size, 0);
+    int bytes_sent = send(client_session->socket, message, message_size, 0);
 
     if (bytes_sent < 0)
     {
@@ -624,33 +653,33 @@ int send_message3(int socket, unsigned char *nonceS, unsigned char *aes_key)
  *
  * @return          Returns 0 if the message is successfully received and decrypted, or -1 in case of errors.
  */
-int receive_message3(int socket, unsigned char *aes_key)
+int receive_message3(Session *server_session)
 {
     unsigned char *plaintext, *ciphertext, *aad, *tag, *iv;
 
-    allocate_and_store_buffer(sv_free_buf, socket, 1, &ciphertext);
-    if (recv_all(socket, (void *)ciphertext, 1) != 1)
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
+    if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
     {
         log_error("Error receiving ciphertext");
         return -1;
     }
 
-    allocate_and_store_buffer(sv_free_buf, socket, NONCE_LEN, &aad);
-    if (recv_all(socket, (void *)aad, NONCE_LEN) != NONCE_LEN)
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &aad);
+    if (recv_all(server_session->socket, (void *)aad, NONCE_LEN) != NONCE_LEN)
     {
         log_error("Error receiving AAD");
         return -1;
     }
 
-    allocate_and_store_buffer(sv_free_buf, socket, TAG_LEN, &tag);
-    if (recv_all(socket, (void *)tag, TAG_LEN) != TAG_LEN)
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, TAG_LEN, &tag);
+    if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
     {
         log_error("Error receiving tag");
         return -1;
     }
 
-    allocate_and_store_buffer(sv_free_buf, socket, IV_LEN, &iv);
-    if (recv_all(socket, (void *)iv, IV_LEN) != IV_LEN)
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
+    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != IV_LEN)
     {
         log_error("Error receiving IV");
         return -1;
@@ -658,7 +687,7 @@ int receive_message3(int socket, unsigned char *aes_key)
 
     // Decrypt the message
 
-    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, aes_key, iv, IV_LEN, plaintext);
+    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, server_session->aes_key, iv, IV_LEN, plaintext);
     if (plaintext_len < 0)
     {
         log_error("Error decrypting message");
@@ -674,15 +703,13 @@ int receive_message3(int socket, unsigned char *aes_key)
     }
 
     // TODO: check if the nonce is the same of the one sent before (saved in the session struct)
+    if (memcmp(server_session->nonceServer, aad, NONCE_LEN))
+    {
+        log_error("Error: nonceC is not equal to the nonce sent before");
+        return -1;
+    };
 
     // Free the buffers
 
     return 0;
 }
-
-// TODO: Session class
-// username
-// nonce
-// aes_key
-// socket
-// 

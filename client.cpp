@@ -31,9 +31,16 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
+    // TODO: Crea la sessione
+    // TODO: Salvo il socket nella sessione
+    // TODO: Chiama send_message1
+    // TODO: Leggo la private key del client (ottenuta concatenando il percorso fisso con lo username)
+    // TODO: Chiama receive_message2
+    // TODO: Chiama send_message3
+    // Handshake completato
+
     while(1)
     {
-
     }
 
     close(sd);

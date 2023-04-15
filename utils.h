@@ -45,10 +45,13 @@ extern unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
 
 // SESSION STRUCT
 struct Session {
-    unsigned char username;
-    unsigned char nonce;
-    unsigned char aes_key;
+    std::string username;
+    unsigned char nonceClient[NONCE_LEN];
+    unsigned char *nonceServer[NONCE_LEN];
+    unsigned char aes_key[32];
+    EVP_PKEY *pubkey;
     int socket;
+    // TODO: Aggiungere i counter per le funzioni
 };
 
 // NONCE LIST

@@ -2,6 +2,9 @@
 
 int main(int argc, char**argv)
 {
+
+    // TODO: Crea la mappa di sessioni
+    // TODO: Crea la nonce_list
     if(argc == 1)
     {
         port = 4242;
@@ -48,15 +51,18 @@ int main(int argc, char**argv)
             }
             else
                 printf("LOG_INFO: Socket chiuso correttamente");
+            // TODO: Crea la sessione
+            // TODO: Salvo il socket nella sessione
+            // TODO: Chiama receive_message1
+            // TODO: Implementare la funzione che legge la chiave privata del server (/server_file/key/server_private_key.pem)
+            // TODO: Leggere la chiave pubblica del client (il file deve essere aperto concatenando il percorso fisso con lo username ricevuto dal client)
+            // TODO: Chiama send_message2
+            // TODO: Chiama receive_message3
+            // Handshake completato
             
         }
 
-        /*while(1)
-        { 
 
-
-            
-        }*/
 
     }
 
