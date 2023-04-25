@@ -81,8 +81,8 @@ int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t 
         // buffer_array is full
         std::cerr << "Error: Buffer array is full" << std::endl
                   << "Exiting program" << std::endl;
-        free_allocated_buffers(cl_free_buf);
-        free_allocated_buffers(sv_free_buf);
+        // free_allocated_buffers(cl_free_buf);
+        // free_allocated_buffers(sv_free_buf);
         exit(EXIT_FAILURE);
     }
 
@@ -164,6 +164,7 @@ int recv_all(int socket, void *buffer, ssize_t len)
 
         return len - bytes_left;
     }
+    return -1;
 }
 
 bool isRegistered(std::string_view username)

@@ -38,13 +38,9 @@ const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const size_t USERNAMESIZE = 25;
 const std::string F_NAME = "users.csv";
 
-// extern int cl_index_free_buf;
-extern unsigned char *cl_free_buf[MAX_BUF_SIZE] = {0};
-// extern int sv_index_free_buf;
-extern unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
-
 // SESSION STRUCT
-struct Session {
+struct Session
+{
     std::string username;
     unsigned char nonceClient[NONCE_LEN];
     unsigned char *nonceServer[NONCE_LEN];
@@ -55,42 +51,56 @@ struct Session {
 };
 
 // NONCE LIST
-class NonceList {
+class NonceList
+{
 private:
-    std::list<unsigned char*> nonce_list;
+    std::list<unsigned char *> nonce_list;
 
     // Compare two nonces
-    static bool compare_nonces(const unsigned char* a, const unsigned char* b) {
-        return std::strcmp(reinterpret_cast<const char*>(a), reinterpret_cast<const char*>(b)) == 0;
+    static bool compare_nonces(const unsigned char *a, const unsigned char *b)
+    {
+        return std::strcmp(reinterpret_cast<const char *>(a), reinterpret_cast<const char *>(b)) == 0;
     }
 
 public:
     // Insert a nonce into the list
-    void insert(const unsigned char* nonce) {
-        unsigned char* nonce_copy = new unsigned char[std::strlen(reinterpret_cast<const char*>(nonce)) + 1];
-        std::strcpy(reinterpret_cast<char*>(nonce_copy), reinterpret_cast<const char*>(nonce));
+    void insert(const unsigned char *nonce)
+    {
+        unsigned char *nonce_copy = new unsigned char[std::strlen(reinterpret_cast<const char *>(nonce)) + 1];
+        std::strcpy(reinterpret_cast<char *>(nonce_copy), reinterpret_cast<const char *>(nonce));
         nonce_list.push_back(nonce_copy);
     }
 
     // Check if a nonce is in the list
-    bool contains(const unsigned char* nonce) const {
-        for (const unsigned char* stored_nonce : nonce_list) {
-            if (compare_nonces(stored_nonce, nonce)) {
+    bool contains(const unsigned char *nonce) const
+    {
+        for (const unsigned char *stored_nonce : nonce_list)
+        {
+            if (compare_nonces(stored_nonce, nonce))
+            {
                 return true;
             }
         }
         return false;
     }
 
-    ~NonceList() {
-        for (unsigned char* nonce : nonce_list) {
+    ~NonceList()
+    {
+        for (unsigned char *nonce : nonce_list)
+        {
             delete[] nonce;
         }
     }
 };
 
-// USER 
+// USER
 bool isRegistered(std::string_view username);
+
+// MANAGE MESSAGES
+bool send_message1(Session *client_session);
+bool receive_message1(Session *server_session, NonceList nonce_list);
+bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key);
+bool receive_message2(Session *client_session, EVP_PKEY *client_private_key);
 
 // MEMORY HANDLER
 
@@ -109,6 +119,7 @@ int load_crl(std::string filename, X509_CRL **crl);
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
 EVP_PKEY *load_public_key(const char *public_key_file);
+EVP_PKEY *load_private_key(const char *private_key_file);
 
 // DIGITAL SIGNATURE
 
@@ -149,7 +160,6 @@ int envelope_decrypt(EVP_PKEY *private_key,
                      unsigned char *iv,
                      unsigned char *plaintext);
 #endif
-
 
 // #include <map>
 

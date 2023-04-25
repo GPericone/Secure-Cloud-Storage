@@ -4,9 +4,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
-
+#include "utils.h"
 
 struct sockaddr_in srvAddr;
-char* ipServer;
-int serverPort, sd, ret;
+const char* ipServer = "127.0.0.1";
+int serverPort = 4243;
+int sd, ret;

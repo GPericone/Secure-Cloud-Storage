@@ -118,8 +118,7 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     // Initialize the context for certificate verification.
     if (X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
     {
-    std:
-        cerr << "An error occurred during initialization of the store context" << std::endl;
+        std::cerr << "An error occurred during initialization of the store context" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
         return -1;
     }
@@ -172,6 +171,46 @@ EVP_PKEY *load_public_key(const char *public_key_file)
     }
 
     return public_key;
+}
+
+/**
+ * @brief Loads a private key from the specified PEM file.
+ *
+ * This function attempts to open and read a private key from the specified PEM file.
+ * If the file cannot be opened or the private key cannot be read, an error message
+ * is displayed, and the function returns nullptr.
+ *
+ * @param private_key_file Pointer to a null-terminated string containing the path to the PEM file with the private key.
+ *
+ * @return                Pointer to an EVP_PKEY structure containing the private key, or nullptr in case of errors.
+ */
+EVP_PKEY* load_private_key(const char* private_key_file)
+{
+    // Open the file
+    FILE* priv_key_file = fopen(private_key_file, "r");
+    if (!priv_key_file)
+    {
+        std::cerr << "Error opening private key file: " << private_key_file << std::endl;
+        return nullptr;
+    }
+
+    // Read the private key from the file
+    // FIXME: RIMUOVERE la password
+    EVP_PKEY* private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void *)"password");
+
+    // Handle errors
+    if (!private_key)
+    {
+        std::cerr << "Error reading private key from file: " << private_key_file << std::endl;
+        std::cerr << "OpenSSL error: " << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
+        fclose(priv_key_file);
+        return nullptr;
+    }
+
+    // Close the file
+    fclose(priv_key_file);
+
+    return private_key;
 }
 
 // TODO: Forse serve
@@ -595,7 +634,7 @@ int envelope_decrypt(EVP_PKEY *private_key,
 
     // Decrypt the symmetric key that will be used to decrypt the ciphertext
     ret = EVP_OpenInit(ctx, EVP_aes_256_cbc(), sym_key_enc, sym_key_len, iv, private_key);
-    if (ret != 1)
+    if (ret == 0)
     {
         log_error("An error occurred during the open initialization");
         return -1;
