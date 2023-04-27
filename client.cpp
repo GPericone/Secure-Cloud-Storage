@@ -8,7 +8,7 @@ int main(int argc, char **argv)
         ipServer = argv[1];
         serverPort = atoi(argv[2]);
     } else {
-        serverPort = 4243;
+        serverPort = 4242;
     }
 
     // Create socket
@@ -43,9 +43,18 @@ int main(int argc, char **argv)
         exit(1);
     }
     
-    receive_message2(session.get(), private_key);
-    // TODO: Chiama receive_message2
-    // TODO: Chiama send_message3
+    if (receive_message2(session.get(), private_key) == false)
+    {
+        printf("LOG_ERROR: Errore in fase di ricezione del messaggio 2\n");
+        exit(1);
+    }
+
+    if (send_message3(session.get()) == false)
+    {
+        printf("LOG_ERROR: Errore in fase di invio del messaggio 3\n");
+        exit(1);
+    }
+    
     // Handshake completato
 
     // while(1)

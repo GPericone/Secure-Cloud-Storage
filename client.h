@@ -8,5 +8,5 @@
 
 struct sockaddr_in srvAddr;
 const char* ipServer = "127.0.0.1";
-int serverPort = 4243;
+int serverPort = 2;
 int sd, ret;

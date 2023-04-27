@@ -5,12 +5,12 @@ int main(int argc, char **argv)
 {
 
     // TODO: Crea la mappa di sessioni
-    std::map<unsigned char, Session> sessioni;
+    std::map<std::string, Session> sessioni;
     // TODO: Crea la nonce_list
     auto nonce_list = NonceList();
     if (argc == 1)
     {
-        port = 4243;
+        port = 4242;
     }
     else
         port = atoi(argv[1]);
@@ -76,8 +76,21 @@ int main(int argc, char **argv)
                 exit(1);
             }
 
-            send_message2(session.get(), client_public_key, server_private_key);
-            // TODO: Chiama receive_message3
+            if (send_message2(session.get(), client_public_key, server_private_key) == false)
+            {
+                printf("LOG_ERROR: Errore in fase di invio del messaggio 2\n");
+                exit(1);
+            }
+
+            if (receive_message3(session.get()) == false)
+            {
+                printf("LOG_ERROR: Errore in fase di ricezione del messaggio 3\n");
+                exit(1);
+            }
+            printf("Handshake completato\n");
+            // inserisco session nella mappa
+            sessioni.insert(std::make_pair(session->username, *session));
+
             // Handshake completato
         }
         else

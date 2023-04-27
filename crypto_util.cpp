@@ -184,10 +184,10 @@ EVP_PKEY *load_public_key(const char *public_key_file)
  *
  * @return                Pointer to an EVP_PKEY structure containing the private key, or nullptr in case of errors.
  */
-EVP_PKEY* load_private_key(const char* private_key_file)
+EVP_PKEY *load_private_key(const char *private_key_file)
 {
     // Open the file
-    FILE* priv_key_file = fopen(private_key_file, "r");
+    FILE *priv_key_file = fopen(private_key_file, "r");
     if (!priv_key_file)
     {
         std::cerr << "Error opening private key file: " << private_key_file << std::endl;
@@ -195,8 +195,7 @@ EVP_PKEY* load_private_key(const char* private_key_file)
     }
 
     // Read the private key from the file
-    // FIXME: RIMUOVERE la password
-    EVP_PKEY* private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void *)"password");
+    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, nullptr);
 
     // Handle errors
     if (!private_key)

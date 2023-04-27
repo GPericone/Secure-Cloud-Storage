@@ -101,6 +101,8 @@ bool send_message1(Session *client_session);
 bool receive_message1(Session *server_session, NonceList nonce_list);
 bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key);
 bool receive_message2(Session *client_session, EVP_PKEY *client_private_key);
+bool send_message3(Session *client_session);
+bool receive_message3(Session *server_session);
 
 // MEMORY HANDLER
 

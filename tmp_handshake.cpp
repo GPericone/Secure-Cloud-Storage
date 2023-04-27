@@ -21,10 +21,9 @@ unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
 bool send_message1(Session *client_session)
 {
     // Prompt the user for their username
-    //FIXME: eliminare lo username hardcodato
-    std::string username = "vito";
-    // std::cout << "Enter your username" << std::endl;
-    // std::cin >> username;
+    std::string username;
+    std::cout << "Enter your username" << std::endl;
+    std::cin >> username;
 
     if (username.empty() || username.size() > USERNAMESIZE)
     {
@@ -333,7 +332,7 @@ bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKE
  */
 bool receive_message2(Session *client_session, EVP_PKEY *client_private_key)
 {
-    int ret, payload_len, cert_len, envelope_len, signature_len;
+    int payload_len, cert_len, envelope_len, signature_len;
     unsigned char *envelope, *signature, *nonceS;
     X509 *certificate = nullptr;
 
@@ -570,140 +569,146 @@ bool receive_message2(Session *client_session, EVP_PKEY *client_private_key)
     return true;
 }
 
-// /**
-//  * @brief Sends an encrypted message containing the server-generated nonce (nonceS) to the specified socket.
-//  *
-//  * This function encrypts the server-generated nonce (nonceS) using AES-GCM-256 with the provided AES key and IV.
-//  * It then sends the encrypted message to the specified socket. The encrypted message has the structure: ciphertext | tag.
-//  * The encryption uses the provided AES key and IV, and does not include any Additional Authenticated Data (AAD).
-//  *
-//  * @param socket The socket to send the encrypted message to.
-//  * @param nonceS A pointer to the unsigned char array containing the server-generated nonce.
-//  * @param aes_key A pointer to the unsigned char array containing the AES-GCM-256 key.
-//  *
-//  * @return 0 on success, -1 on error.
-//  */
-// int send_message3(Session *client_session)
-// {
-//     unsigned char *plaintext, *ciphertext, *tag, *aad, *iv;
-//     size_t aad_len = NONCE_LEN;
-//     // Dummy byte to avoid empty plaintext
-//     plaintext[0] = 1;
+/**
+ * @brief Sends an encrypted message containing the server-generated nonce (nonceS) to the specified socket.
+ *
+ * This function encrypts the server-generated nonce (nonceS) using AES-GCM-256 with the provided AES key and IV.
+ * It then sends the encrypted message to the specified socket. The encrypted message has the structure: ciphertext | tag.
+ * The encryption uses the provided AES key and IV, and does not include any Additional Authenticated Data (AAD).
+ *
+ * @param socket The socket to send the encrypted message to.
+ * @param nonceS A pointer to the unsigned char array containing the server-generated nonce.
+ * @param aes_key A pointer to the unsigned char array containing the AES-GCM-256 key.
+ *
+ * @return 0 on success, -1 on error.
+ */
+bool send_message3(Session *client_session)
+{
+    unsigned char *ciphertext, *plaintext, *tag, *aad, *iv;
 
-//     allocate_and_store_buffer(cl_free_buf, client_session->socket, aad_len, &aad);
-//     allocate_and_store_buffer(cl_free_buf, client_session->socket, IV_LEN, &iv);
-//     allocate_and_store_buffer(cl_free_buf, client_session->socket, TAG_LEN, &tag);
+    size_t aad_len = NONCE_LEN;
+    // Dummy byte to avoid empty plaintext
 
-//     memcpy(aad, client_session->nonceServer, aad_len);
-//     if (!RAND_bytes(iv, IV_LEN))
-//     {
-//         log_error("Error generating IV");
-//         return -1;
-//     }
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &plaintext);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, aad_len, &aad);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, IV_LEN, &iv);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, TAG_LEN, &tag);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &ciphertext);
 
-//     int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, aad_len, client_session->aes_key, iv, IV_LEN, ciphertext, tag);
+    plaintext[0] = 1;
 
-//     if (ciphertext_len < 0)
-//     {
-//         log_error("Error encrypting message");
-//         return -1;
-//     }
+    memcpy(aad, client_session->nonceServer, aad_len);
+    if (!RAND_bytes(iv, IV_LEN))
+    {
+        log_error("Error generating IV");
+        return false;
+    }
 
-//     // PAYLOAD STRUCTURE: ciphertext | tag
-//     unsigned char *message;
-//     size_t message_size = ciphertext_len + aad_len + TAG_LEN + IV_LEN;
+    int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, aad_len, client_session->aes_key, iv, IV_LEN, ciphertext, tag);
 
-//     allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
-//     memcpy(message, ciphertext, ciphertext_len);
-//     memcpy(message + ciphertext_len, aad, aad_len);
-//     memcpy(message + ciphertext_len + aad_len, tag, TAG_LEN);
-//     memcpy(message + ciphertext_len + aad_len + TAG_LEN, iv, IV_LEN);
+    if (ciphertext_len < 0)
+    {
+        log_error("Error encrypting message");
+        return false;
+    }
 
-//     // Send the message
+    // PAYLOAD STRUCTURE: ciphertext | tag
+    unsigned char *message;
+    size_t message_size = ciphertext_len + aad_len + TAG_LEN + IV_LEN;
 
-//     int bytes_sent = send(client_session->socket, message, message_size, 0);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
+    memcpy(message, ciphertext, ciphertext_len);
+    memcpy(message + ciphertext_len, aad, aad_len);
+    memcpy(message + ciphertext_len + aad_len, tag, TAG_LEN);
+    memcpy(message + ciphertext_len + aad_len + TAG_LEN, iv, IV_LEN);
 
-//     if (bytes_sent < 0)
-//     {
-//         log_error("Error sending message");
-//         return -1;
-//     }
+    // Send the message
 
-//     // Free the buffers
-//     free_allocated_buffers(cl_free_buf);
+    int bytes_sent = send(client_session->socket, message, message_size, 0);
 
-//     return 0;
-// }
-// /**
-//  * @brief Receives and decrypts an encrypted message from a socket using AES-GCM.
-//  * 
-//  * This function reads an encrypted message from the specified socket, along with associated
-//  * AAD, tag, and IV. It then decrypts the message using the provided AES key and checks if
-//  * the decrypted plaintext is equal to a predefined dummy byte. If successful, the function
-//  * returns 0; otherwise, it returns -1 in case of errors.
-//  *
-//  * @param socket    Socket from which the encrypted message and associated data are received.
-//  * @param aes_key   Pointer to an unsigned char array containing the AES key for decryption.
-//  *
-//  * @return          Returns 0 if the message is successfully received and decrypted, or -1 in case of errors.
-//  */
-// int receive_message3(Session *server_session)
-// {
-//     unsigned char *plaintext, *ciphertext, *aad, *tag, *iv;
+    if (bytes_sent < 0)
+    {
+        log_error("Error sending message");
+        return false;
+    }
 
-//     allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
-//     if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
-//     {
-//         log_error("Error receiving ciphertext");
-//         return -1;
-//     }
+    // Free the buffers
+    free_allocated_buffers(cl_free_buf);
 
-//     allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &aad);
-//     if (recv_all(server_session->socket, (void *)aad, NONCE_LEN) != NONCE_LEN)
-//     {
-//         log_error("Error receiving AAD");
-//         return -1;
-//     }
+    return true;
+}
+/**
+ * @brief Receives and decrypts an encrypted message from a socket using AES-GCM.
+ * 
+ * This function reads an encrypted message from the specified socket, along with associated
+ * AAD, tag, and IV. It then decrypts the message using the provided AES key and checks if
+ * the decrypted plaintext is equal to a predefined dummy byte. If successful, the function
+ * returns 0; otherwise, it returns -1 in case of errors.
+ *
+ * @param socket    Socket from which the encrypted message and associated data are received.
+ * @param aes_key   Pointer to an unsigned char array containing the AES key for decryption.
+ *
+ * @return          Returns 0 if the message is successfully received and decrypted, or -1 in case of errors.
+ */
+bool receive_message3(Session *server_session)
+{
+    unsigned char *plaintext = nullptr; 
+    unsigned char *ciphertext, *aad, *tag, *iv;
 
-//     allocate_and_store_buffer(sv_free_buf, server_session->socket, TAG_LEN, &tag);
-//     if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
-//     {
-//         log_error("Error receiving tag");
-//         return -1;
-//     }
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &plaintext);
+    if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
+    {
+        log_error("Error receiving ciphertext");
+        return false;
+    }
 
-//     allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
-//     if (recv_all(server_session->socket, (void *)iv, IV_LEN) != IV_LEN)
-//     {
-//         log_error("Error receiving IV");
-//         return -1;
-//     }
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &aad);
+    if (recv_all(server_session->socket, (void *)aad, NONCE_LEN) != NONCE_LEN)
+    {
+        log_error("Error receiving AAD");
+        return false;
+    }
 
-//     // Decrypt the message
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, TAG_LEN, &tag);
+    if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
+    {
+        log_error("Error receiving tag");
+        return false;
+    }
 
-//     int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, server_session->aes_key, iv, IV_LEN, plaintext);
-//     if (plaintext_len < 0)
-//     {
-//         log_error("Error decrypting message");
-//         return -1;
-//     }
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
+    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int) IV_LEN)
+    {
+        log_error("Error receiving IV");
+        return false;
+    }
 
-//     // CHECK if the plaintext is equal to the dummy byte
+    // Decrypt the message
 
-//     if (plaintext[0] != 1)
-//     {
-//         log_error("Error: plaintext is not equal to the dummy byte");
-//         return -1;
-//     }
+    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, server_session->aes_key, iv, IV_LEN, plaintext);
+    if (plaintext_len < 0)
+    {
+        log_error("Error decrypting message");
+        return false;
+    }
 
-//     // TODO: check if the nonce is the same of the one sent before (saved in the session struct)
-//     if (memcmp(server_session->nonceServer, aad, NONCE_LEN))
-//     {
-//         log_error("Error: nonceC is not equal to the nonce sent before");
-//         return -1;
-//     };
+    // CHECK if the plaintext is equal to the dummy byte
 
-//     // Free the buffers
+    if (plaintext[0] != 1)
+    {
+        log_error("Error: plaintext is not equal to the dummy byte");
+        return false;
+    }
 
-//     return 0;
-// }
+    // TODO: check if the nonce is the same of the one sent before (saved in the session struct)
+    if (memcmp(server_session->nonceServer, aad, NONCE_LEN))
+    {
+        log_error("Error: nonceC is not equal to the nonce sent before");
+        return false;
+    }
+
+    // Free the buffers
+
+    return true;
+}
