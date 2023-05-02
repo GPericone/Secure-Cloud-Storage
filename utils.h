@@ -46,6 +46,8 @@ struct Session
     unsigned char *nonceServer[NONCE_LEN];
     unsigned char aes_key[32];
     EVP_PKEY *pubkey;
+    EVP_PKEY *eph_key_priv;
+    EVP_PKEY *eph_key_pub;
     int socket;
     // TODO: Aggiungere i counter per le funzioni
 };
@@ -122,6 +124,8 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
+bool generateEphKeys(EVP_PKEY **eph_key_priv, EVP_PKEY **eph_key_pub, int key_size);
+int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key);
 
 // DIGITAL SIGNATURE
 

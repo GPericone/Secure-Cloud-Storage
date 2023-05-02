@@ -5,7 +5,6 @@ unsigned char *cl_free_buf[MAX_BUF_SIZE] = {0};
 // extern int sv_index_free_buf;
 unsigned char *sv_free_buf[MAX_BUF_SIZE] = {0};
 
-
 // TODO: Aggiungere la gestione dei vari errori con la free e la close(socket) di tutto all'interno del main
 // TODO: Gestire la pulizia in caso di return 0, salvare tutte le informazioni utili dentro la classe sessione prima di liberare la memoria
 
@@ -31,7 +30,23 @@ bool send_message1(Session *client_session)
         return false;
     }
 
+    EVP_PKEY *client_private_key = load_private_key(("client_file/keys/" + username + "_private_key.pem").c_str());
+    EVP_PKEY *eph_key_priv = nullptr;
+    EVP_PKEY *eph_key_pub = nullptr;
+
+    if (!generateEphKeys(&eph_key_priv, &eph_key_pub, 2048))
+    {
+        log_error("Error generating ephemeral keys");
+        return false;
+    }
+
+    unsigned char* username_len_byte = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &username_len_byte);
+    serialize_int(username.size(), username_len_byte);
+
     client_session->username = username;
+    client_session->eph_key_priv = EVP_PKEY_dup(eph_key_priv);
+    client_session->eph_key_pub = EVP_PKEY_dup(eph_key_pub);
 
     // Generate a client nonce
     unsigned char *nonce = nullptr;
@@ -44,9 +59,41 @@ bool send_message1(Session *client_session)
 
     memcpy(client_session->nonceClient, nonce, NONCE_LEN);
 
+    unsigned char *serialized_eph_key_pub = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, 2048, &serialized_eph_key_pub);
+    int key_len = serialize_public_key(eph_key_pub, &serialized_eph_key_pub);
+
+    unsigned char *signature = nullptr;
+    int signature_len = EVP_PKEY_size(client_private_key);
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, signature_len, &signature);
+
+    unsigned char *to_sign = nullptr;
+    int to_sign_len = NONCE_LEN + sizeof(int) + username.size() + sizeof(int) + key_len;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, to_sign_len, &to_sign);
+
+    unsigned char *to_sign_len_byte = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &to_sign_len_byte);
+    serialize_int(to_sign_len, to_sign_len_byte);
+
+    memcpy(to_sign, nonce, NONCE_LEN);
+    memcpy(to_sign + NONCE_LEN, username_len_byte, sizeof(int));
+    memcpy(to_sign + NONCE_LEN + sizeof(int), username.c_str(), username.size());
+    memcpy(to_sign + NONCE_LEN + sizeof(int) + username.size(), to_sign_len_byte, sizeof(int));
+    memcpy(to_sign + NONCE_LEN + sizeof(int) + username.size() + sizeof(int), serialized_eph_key_pub, key_len);
+
+    if (create_digital_signature(client_private_key, to_sign, to_sign_len, signature) != signature_len)
+    {
+        log_error("Failed to create digital signature");
+        return false;
+    }
+
+    unsigned char *signature_len_byte = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &signature_len_byte);
+    serialize_int(signature_len, signature_len_byte);
+
     // Calculate payload size
     unsigned char *payload_size_byte, *message;
-    int payload_size = username.size() + NONCE_LEN;
+    int payload_size = to_sign_len + sizeof(int) + signature_len;
 
     // Create message buffer
     allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &payload_size_byte);
@@ -58,8 +105,9 @@ bool send_message1(Session *client_session)
 
     // Copy nonce and username into message buffer
     memcpy(message, payload_size_byte, sizeof(int));
-    memcpy(message + sizeof(int), nonce, NONCE_LEN);
-    memcpy(message + sizeof(int) + NONCE_LEN, username.c_str(), username.size());
+    memcpy(message + sizeof(int), to_sign, to_sign_len);
+    memcpy(message + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
+    memcpy(message + sizeof(int) + to_sign_len, signature, signature_len);
 
     // Send message
 
@@ -69,8 +117,6 @@ bool send_message1(Session *client_session)
         return false;
     }
 
-    // TODO: Serve qui?
-    free_allocated_buffers(cl_free_buf);
     return true;
 }
 
@@ -92,7 +138,7 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
 
     // Read payload length
     allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &payload_len_byte);
-    if ((ret = recv_all(server_session->socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
+    if ((recv_all(server_session->socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read payload length");
         return false;
@@ -132,15 +178,15 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
         return false;
     }
 
-    auto username_str = std::string(reinterpret_cast<char*>(username), user_len);
+    auto username_str = std::string(reinterpret_cast<char *>(username), user_len);
 
     // Check username
-    if(!isRegistered(username_str))
+    if (!isRegistered(username_str))
     {
         log_error("User not registered");
         return false;
     }
-    
+
     printf("User %s connected\n", username_str.c_str());
     server_session->username = username_str;
 
@@ -313,10 +359,9 @@ bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKE
     return true;
 }
 
-
 /**
  * @brief Receives and processes an encrypted message from a socket containing session key information.
- * 
+ *
  * This function receives and processes an encrypted message from the specified socket, which contains
  * the session key information. The message components include the payload, certificate, envelope,
  * signature, and nonce. The function verifies the authenticity of the server's certificate and the
@@ -371,7 +416,7 @@ bool receive_message2(Session *client_session, EVP_PKEY *client_private_key)
     }
 
     // Deserialize the certificate
-    certificate = d2i_X509(&certificate, (const unsigned char**)&certficate_byte, cert_len);
+    certificate = d2i_X509(&certificate, (const unsigned char **)&certficate_byte, cert_len);
     if (certificate == nullptr)
     {
         log_error("Error deserializing certificate");
@@ -639,7 +684,7 @@ bool send_message3(Session *client_session)
 }
 /**
  * @brief Receives and decrypts an encrypted message from a socket using AES-GCM.
- * 
+ *
  * This function reads an encrypted message from the specified socket, along with associated
  * AAD, tag, and IV. It then decrypts the message using the provided AES key and checks if
  * the decrypted plaintext is equal to a predefined dummy byte. If successful, the function
@@ -652,7 +697,7 @@ bool send_message3(Session *client_session)
  */
 bool receive_message3(Session *server_session)
 {
-    unsigned char *plaintext = nullptr; 
+    unsigned char *plaintext = nullptr;
     unsigned char *ciphertext, *aad, *tag, *iv;
 
     allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
@@ -678,7 +723,7 @@ bool receive_message3(Session *server_session)
     }
 
     allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
-    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int) IV_LEN)
+    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
     {
         log_error("Error receiving IV");
         return false;
