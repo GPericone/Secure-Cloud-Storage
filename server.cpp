@@ -62,13 +62,6 @@ int main(int argc, char **argv)
             // TODO: Implementare la funzione che legge la chiave privata del server (/server_file/key/server_private_key.pem)
             // TODO: Leggere la chiave pubblica del client (il file deve essere aperto concatenando il percorso fisso con lo username ricevuto dal client)
             // TODO: Chiama send_message2
-            EVP_PKEY *client_public_key = load_public_key(("server_file/public_keys/" + session->username + "_public_key.pem").c_str());
-            if (client_public_key == nullptr)
-            {
-                printf("LOG_ERROR: Errore in fase di caricamento della chiave pubblica del client\n");
-                exit(1);
-            }
-
             EVP_PKEY *server_private_key = load_private_key("server_file/keys/server_private_key.pem");
             if (server_private_key == nullptr)
             {
@@ -76,12 +69,12 @@ int main(int argc, char **argv)
                 exit(1);
             }
 
-            if (send_message2(session.get(), client_public_key, server_private_key) == false)
+            if (send_message2(session.get(), server_private_key) == false)
             {
                 printf("LOG_ERROR: Errore in fase di invio del messaggio 2\n");
                 exit(1);
             }
-
+            // EVP_PKEY_free(server_private_key);
             if (receive_message3(session.get()) == false)
             {
                 printf("LOG_ERROR: Errore in fase di ricezione del messaggio 3\n");

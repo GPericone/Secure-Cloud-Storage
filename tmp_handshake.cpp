@@ -31,16 +31,25 @@ bool send_message1(Session *client_session)
     }
 
     EVP_PKEY *client_private_key = load_private_key(("client_file/keys/" + username + "_private_key.pem").c_str());
+    if (client_private_key == nullptr)
+    {
+        log_error("Failed to load the client private key");
+        return false;
+    }
+
     EVP_PKEY *eph_key_priv = nullptr;
     EVP_PKEY *eph_key_pub = nullptr;
 
-    if (!generateEphKeys(&eph_key_priv, &eph_key_pub, 2048))
+    if (!generateEphKeys(&eph_key_priv, &eph_key_pub))
     {
         log_error("Error generating ephemeral keys");
         return false;
     }
 
-    unsigned char* username_len_byte = nullptr;
+    client_session->eph_key_priv = EVP_PKEY_dup(eph_key_priv);
+    client_session->eph_key_pub = EVP_PKEY_dup(eph_key_pub);
+
+    unsigned char *username_len_byte = nullptr;
     allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &username_len_byte);
     serialize_int(username.size(), username_len_byte);
 
@@ -71,14 +80,18 @@ bool send_message1(Session *client_session)
     int to_sign_len = NONCE_LEN + sizeof(int) + username.size() + sizeof(int) + key_len;
     allocate_and_store_buffer(cl_free_buf, client_session->socket, to_sign_len, &to_sign);
 
-    unsigned char *to_sign_len_byte = nullptr;
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &to_sign_len_byte);
-    serialize_int(to_sign_len, to_sign_len_byte);
+    // unsigned char *to_sign_len_byte = nullptr;
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &to_sign_len_byte);
+    // serialize_int(to_sign_len, to_sign_len_byte);
 
+    unsigned char* key_len_byte = nullptr;
+    allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &key_len_byte);
+    serialize_int(key_len, key_len_byte);
+    
     memcpy(to_sign, nonce, NONCE_LEN);
     memcpy(to_sign + NONCE_LEN, username_len_byte, sizeof(int));
     memcpy(to_sign + NONCE_LEN + sizeof(int), username.c_str(), username.size());
-    memcpy(to_sign + NONCE_LEN + sizeof(int) + username.size(), to_sign_len_byte, sizeof(int));
+    memcpy(to_sign + NONCE_LEN + sizeof(int) + username.size(), key_len_byte, sizeof(int));
     memcpy(to_sign + NONCE_LEN + sizeof(int) + username.size() + sizeof(int), serialized_eph_key_pub, key_len);
 
     if (create_digital_signature(client_private_key, to_sign, to_sign_len, signature) != signature_len)
@@ -107,7 +120,7 @@ bool send_message1(Session *client_session)
     memcpy(message, payload_size_byte, sizeof(int));
     memcpy(message + sizeof(int), to_sign, to_sign_len);
     memcpy(message + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + to_sign_len, signature, signature_len);
+    memcpy(message + sizeof(int) + to_sign_len + sizeof(int), signature, signature_len);
 
     // Send message
 
@@ -132,8 +145,8 @@ bool send_message1(Session *client_session)
  */
 bool receive_message1(Session *server_session, NonceList nonce_list)
 {
-    int payload_len, user_len, ret;
-    unsigned char *username, *nonce;
+    int payload_len, user_len, key_len, ret;
+
     unsigned char *payload_len_byte;
 
     // Read payload length
@@ -147,14 +160,101 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
     // Deserialize payload_len_byte
     memcpy(&payload_len, payload_len_byte, sizeof(int));
 
-    user_len = payload_len - NONCE_LEN;
-
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, user_len, &username);
+    unsigned char *nonce = nullptr;
     allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &nonce);
-
     if ((recv_all(server_session->socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
     {
         log_error("Failed to receive the nonce");
+        return false;
+    }
+
+    // Read username
+    unsigned char *username_len_byte = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &username_len_byte);
+    if ((recv_all(server_session->socket, (void *)username_len_byte, sizeof(int))) != sizeof(int))
+    {
+        log_error("Failed to read username length");
+        return false;
+    }
+
+    memcpy(&user_len, username_len_byte, sizeof(int));
+
+    unsigned char *username = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, user_len, &username);
+    if ((recv_all(server_session->socket, (void *)username, user_len)) != user_len)
+    {
+        log_error("Failed to receive the username");
+        return false;
+    }
+    
+    auto username_str = std::string(reinterpret_cast<char *>(username), user_len);
+
+    unsigned char *key_len_byte = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &key_len_byte);
+    if ((recv_all(server_session->socket, (void *)key_len_byte, sizeof(int))) != sizeof(int))
+    {
+        log_error("Failed to read key length");
+        return false;
+    }
+
+    memcpy(&key_len, key_len_byte, sizeof(int));
+
+    unsigned char* serialized_eph_key_pub = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, key_len, &serialized_eph_key_pub);
+    if ((recv_all(server_session->socket, (void *)serialized_eph_key_pub, key_len)) != key_len)
+    {
+        log_error("Failed to receive the ephemeral key");
+        return false;
+    }
+
+    EVP_PKEY *eph_key_pub = nullptr;
+    if ((eph_key_pub = deserialize_public_key(serialized_eph_key_pub, key_len)) == nullptr)
+    {
+        log_error("Failed to deserialize the ephemeral key");
+        return false;
+    }
+
+    unsigned char *signature_len_byte = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, sizeof(int), &signature_len_byte);
+    if ((recv_all(server_session->socket, (void *)signature_len_byte, sizeof(int))) != sizeof(int))
+    {
+        log_error("Failed to read signature length");
+        return false;
+    }
+
+    int signature_len;
+    memcpy(&signature_len, signature_len_byte, sizeof(int));
+
+    unsigned char *signature = nullptr;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, signature_len, &signature);
+    if ((recv_all(server_session->socket, (void *)signature, signature_len)) != signature_len)
+    {
+        log_error("Failed to receive the signature");
+        return false;
+    }
+
+    // Verify the signature
+    EVP_PKEY *client_public_key = load_public_key(("server_file/public_keys/" + username_str + "_public_key.pem").c_str());
+
+    if (client_public_key == nullptr)
+    {
+        log_error("Failed to load the client public key");
+        return false;
+    }
+    
+    unsigned char *to_verify = nullptr;
+    int to_verify_len = NONCE_LEN + sizeof(int) + user_len + sizeof(int) + key_len;
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, to_verify_len, &to_verify);
+
+    memcpy(to_verify, nonce, NONCE_LEN);
+    memcpy(to_verify + NONCE_LEN, username_len_byte, sizeof(int));
+    memcpy(to_verify + NONCE_LEN + sizeof(int), username, user_len);
+    memcpy(to_verify + NONCE_LEN + sizeof(int) + user_len, key_len_byte, sizeof(int));
+    memcpy(to_verify + NONCE_LEN + sizeof(int) + user_len + sizeof(int), serialized_eph_key_pub, key_len);
+
+    if ((verify_digital_signature(client_public_key, signature, signature_len, to_verify, to_verify_len)) != 1)
+    {
+        log_error("Failed to verify the signature");
         return false;
     }
 
@@ -171,15 +271,6 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
     // Add nonce to server session
     memcpy(server_session->nonceClient, nonce, NONCE_LEN);
 
-    // Read username
-    if ((recv_all(server_session->socket, (void *)username, user_len)) != user_len)
-    {
-        log_error("Failed to receive the username");
-        return false;
-    }
-
-    auto username_str = std::string(reinterpret_cast<char *>(username), user_len);
-
     // Check username
     if (!isRegistered(username_str))
     {
@@ -189,7 +280,8 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
 
     printf("User %s connected\n", username_str.c_str());
     server_session->username = username_str;
-
+    server_session->eph_key_pub = EVP_PKEY_dup(eph_key_pub);
+    
     return true;
 }
 
@@ -208,7 +300,7 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
  * @param nonceC The client's nonce, included in the message for replay attack protection.
  * @return 0 on success, -1 on failure.
  */
-bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key)
+bool send_message2(Session *server_session, EVP_PKEY *server_private_key)
 {
     // CERTIFICATE
 
@@ -272,13 +364,13 @@ bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKE
     unsigned char *ciphertext = nullptr;
     unsigned char *envelope_iv = nullptr;
     unsigned char *encrypted_envelope_key = nullptr;
-    int encrypted_envelope_key_len = EVP_PKEY_size(client_public_key);
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_PKEY_size(client_public_key), &encrypted_envelope_key);
+    int encrypted_envelope_key_len = EVP_PKEY_size(server_session->eph_key_pub);
+    allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_PKEY_size(server_session->eph_key_pub), &encrypted_envelope_key);
     allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_CIPHER_key_length(EVP_aes_256_gcm()) + EVP_CIPHER_block_size(EVP_aes_256_cbc()), &ciphertext);
     allocate_and_store_buffer(sv_free_buf, server_session->socket, EVP_CIPHER_iv_length(EVP_aes_256_cbc()), &envelope_iv);
 
     // Create the digital envelope
-    int ciphertext_len = envelope_encrypt(client_public_key, plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm()), encrypted_envelope_key, encrypted_envelope_key_len, envelope_iv, ciphertext);
+    int ciphertext_len = envelope_encrypt(server_session->eph_key_pub, plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm()), encrypted_envelope_key, encrypted_envelope_key_len, envelope_iv, ciphertext);
     if (ciphertext_len < 0)
     {
         log_error("An error occurred during envelope encryption");
@@ -375,7 +467,7 @@ bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKE
  * @return          Returns 0 if the message is successfully received, processed, and decrypted,
  *                  or -1 in case of errors.
  */
-bool receive_message2(Session *client_session, EVP_PKEY *client_private_key)
+bool receive_message2(Session *client_session)
 {
     int payload_len, cert_len, envelope_len, signature_len;
     unsigned char *envelope, *signature, *nonceS;
@@ -589,7 +681,7 @@ bool receive_message2(Session *client_session, EVP_PKEY *client_private_key)
     // Decrypt the envelope
     unsigned char *envelope_plaintext = nullptr;
     allocate_and_store_buffer(cl_free_buf, client_session->socket, envelope_ciphertext_len, &envelope_plaintext);
-    int envelope_plaintext_len = envelope_decrypt(client_private_key, envelope_ciphertext, envelope_ciphertext_len, envelope_key, envelope_key_len, envelope_iv, envelope_plaintext);
+    int envelope_plaintext_len = envelope_decrypt(client_session->eph_key_priv, envelope_ciphertext, envelope_ciphertext_len, envelope_key, envelope_key_len, envelope_iv, envelope_plaintext);
 
     if (envelope_plaintext_len == -1)
     {

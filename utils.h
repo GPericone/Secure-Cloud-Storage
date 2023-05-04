@@ -101,8 +101,8 @@ bool isRegistered(std::string_view username);
 // MANAGE MESSAGES
 bool send_message1(Session *client_session);
 bool receive_message1(Session *server_session, NonceList nonce_list);
-bool send_message2(Session *server_session, EVP_PKEY *client_public_key, EVP_PKEY *server_private_key);
-bool receive_message2(Session *client_session, EVP_PKEY *client_private_key);
+bool send_message2(Session *server_session, EVP_PKEY *server_private_key);
+bool receive_message2(Session *client_session);
 bool send_message3(Session *client_session);
 bool receive_message3(Session *server_session);
 
@@ -110,7 +110,7 @@ bool receive_message3(Session *server_session);
 
 void free_allocated_buffers(unsigned char *buffer_array[]);
 int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr);
-void serialize_int(int val, unsigned char *c);
+void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int val, unsigned char *c);
 
 int recv_all(int socket, void *buffer, ssize_t len);
@@ -124,8 +124,9 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
-bool generateEphKeys(EVP_PKEY **eph_key_priv, EVP_PKEY **eph_key_pub, int key_size);
+bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub);
 int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key);
+EVP_PKEY* deserialize_public_key(unsigned char* serialized_key, int key_len);
 
 // DIGITAL SIGNATURE
 

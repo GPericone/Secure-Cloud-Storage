@@ -91,38 +91,38 @@ int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t 
     return i;
 }
 
-// void serialize_int(int input, unsigned char *output)
-// {
-//     output[0] = input & 0xFF;
-//     output[1] = (input) >> 8) & 0xFF;
-//     output[2] = (input >> 16) & 0xFF;
-//     output[3] = (input >> 24) & 0xFF;
-// }
-
 void serialize_int(int input, unsigned char *output)
 {
-    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
-    std::copy(p, p + sizeof(int), output);
+    output[0] = input & 0xFF;
+    output[1] = (input >> 8) & 0xFF;
+    output[2] = (input >> 16) & 0xFF;
+    output[3] = (input >> 24) & 0xFF;
 }
 
-
-void serialize_longint(long int input, unsigned char *output)
-{
-    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
-    std::copy(p, p + sizeof(long int), output);
-}
-
-// void serialize_longint(long int val, unsigned char *c)
+// void serialize_int(int input, unsigned char *output)
 // {
-//     c[0] = val & 0xFF;
-//     c[1] = (val >> 8) & 0xFF;
-//     c[2] = (val >> 16) & 0xFF;
-//     c[3] = (val >> 24) & 0xFF;
-//     c[4] = (val >> 32) & 0xFF;
-//     c[5] = (val >> 40) & 0xFF;
-//     c[6] = (val >> 48) & 0xFF;
-//     c[7] = (val >> 56) & 0xFF;
+//     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+//     std::copy(p, p + sizeof(int), output);
 // }
+
+
+// void serialize_longint(long int input, unsigned char *output)
+// {
+//     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+//     std::copy(p, p + sizeof(long int), output);
+// }
+
+void serialize_longint(long int val, unsigned char *c)
+{
+    c[0] = val & 0xFF;
+    c[1] = (val >> 8) & 0xFF;
+    c[2] = (val >> 16) & 0xFF;
+    c[3] = (val >> 24) & 0xFF;
+    c[4] = (val >> 32) & 0xFF;
+    c[5] = (val >> 40) & 0xFF;
+    c[6] = (val >> 48) & 0xFF;
+    c[7] = (val >> 56) & 0xFF;
+}
 
 /**
  * @brief Receive a specified number of bytes from a socket.
