@@ -818,39 +818,44 @@ bool receive_message2(Session *client_session)
  */
 bool send_message3(Session *client_session)
 {
-    unsigned char *ciphertext, *plaintext, *tag, *aad, *iv;
-
     size_t aad_len = NONCE_LEN;
     // Dummy byte to avoid empty plaintext
 
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &plaintext);
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, aad_len, &aad);
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, IV_LEN, &iv);
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, TAG_LEN, &tag);
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &ciphertext);
+    unsigned char *plaintext = new unsigned char[1];
+    unsigned char *aad = new unsigned char[aad_len];
+    unsigned char *iv = new unsigned char[IV_LEN];
+    unsigned char *tag = new unsigned char[TAG_LEN];
+    unsigned char *ciphertext = new unsigned char[1];
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &plaintext);
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, aad_len, &aad);
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, IV_LEN, &iv);
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, TAG_LEN, &tag);
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, 1, &ciphertext);
 
     plaintext[0] = 1;
 
     memcpy(aad, client_session->nonceServer, aad_len);
-    if (!RAND_bytes(iv, IV_LEN))
+    if (!RAND_bytes(iv, safe_size_t_to_int(IV_LEN)))
     {
         log_error("Error generating IV");
+        delete_buffers(plaintext, aad, iv, tag, ciphertext);
         return false;
     }
 
-    int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, aad_len, client_session->aes_key, iv, IV_LEN, ciphertext, tag);
+    int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, safe_size_t_to_int(aad_len), client_session->aes_key, iv, safe_size_t_to_int(IV_LEN), ciphertext, tag);
 
     if (ciphertext_len < 0)
     {
         log_error("Error encrypting message");
+        delete_buffers(plaintext, aad, iv, tag, ciphertext);
         return false;
     }
 
     // PAYLOAD STRUCTURE: ciphertext | tag
-    unsigned char *message;
     size_t message_size = ciphertext_len + aad_len + TAG_LEN + IV_LEN;
 
-    allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
+    unsigned char *message = new unsigned char[message_size];
+    // allocate_and_store_buffer(cl_free_buf, client_session->socket, message_size, &message);
     memcpy(message, ciphertext, ciphertext_len);
     memcpy(message + ciphertext_len, aad, aad_len);
     memcpy(message + ciphertext_len + aad_len, tag, TAG_LEN);
@@ -858,17 +863,15 @@ bool send_message3(Session *client_session)
 
     // Send the message
 
-    int bytes_sent = send(client_session->socket, message, message_size, 0);
-
-    if (bytes_sent < 0)
+    if (send(client_session->socket, message, message_size, 0) < 0)
     {
         log_error("Error sending message");
+        delete_buffers(plaintext, aad, iv, tag, ciphertext, message);
         return false;
     }
 
     // Free the buffers
-    free_allocated_buffers(cl_free_buf);
-
+    delete_buffers(plaintext, aad, iv, tag, ciphertext, message);
     return true;
 }
 /**
@@ -886,44 +889,52 @@ bool send_message3(Session *client_session)
  */
 bool receive_message3(Session *server_session)
 {
-    unsigned char *plaintext = nullptr;
-    unsigned char *ciphertext, *aad, *tag, *iv;
 
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &plaintext);
+    unsigned char* ciphertext = new unsigned char[1];
+    // allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &ciphertext);
+    unsigned char* plaintext = new unsigned char[1];
+    // allocate_and_store_buffer(sv_free_buf, server_session->socket, 1, &plaintext);
     if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
     {
         log_error("Error receiving ciphertext");
+        delete_buffers(ciphertext, plaintext);
         return false;
     }
 
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &aad);
+    unsigned char *aad = new unsigned char[NONCE_LEN];
+    // allocate_and_store_buffer(sv_free_buf, server_session->socket, NONCE_LEN, &aad);
     if (recv_all(server_session->socket, (void *)aad, NONCE_LEN) != NONCE_LEN)
     {
         log_error("Error receiving AAD");
+        delete_buffers(ciphertext, plaintext, aad);
         return false;
     }
 
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, TAG_LEN, &tag);
+    unsigned char *tag = new unsigned char[TAG_LEN];
+    // allocate_and_store_buffer(sv_free_buf, server_session->socket, TAG_LEN, &tag);
     if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
     {
         log_error("Error receiving tag");
+        delete_buffers(ciphertext, plaintext, aad, tag);
         return false;
     }
 
-    allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
+    unsigned char *iv = new unsigned char[IV_LEN];
+    // allocate_and_store_buffer(sv_free_buf, server_session->socket, IV_LEN, &iv);
     if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
     {
         log_error("Error receiving IV");
+        delete_buffers(ciphertext, plaintext, aad, tag, iv);
         return false;
     }
 
     // Decrypt the message
 
-    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, server_session->aes_key, iv, IV_LEN, plaintext);
+    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, NONCE_LEN, tag, server_session->aes_key, iv, safe_size_t_to_int(IV_LEN), plaintext);
     if (plaintext_len < 0)
     {
         log_error("Error decrypting message");
+        delete_buffers(ciphertext, plaintext, aad, tag, iv);
         return false;
     }
 
@@ -932,6 +943,7 @@ bool receive_message3(Session *server_session)
     if (plaintext[0] != 1)
     {
         log_error("Error: plaintext is not equal to the dummy byte");
+        delete_buffers(ciphertext, plaintext, aad, tag, iv);
         return false;
     }
 
@@ -939,10 +951,11 @@ bool receive_message3(Session *server_session)
     if (memcmp(server_session->nonceServer, aad, NONCE_LEN))
     {
         log_error("Error: nonceC is not equal to the nonce sent before");
+        delete_buffers(ciphertext, plaintext, aad, tag, iv);
         return false;
     }
 
     // Free the buffers
-
+    delete_buffers(ciphertext, plaintext, aad, tag, iv);
     return true;
 }
