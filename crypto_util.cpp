@@ -195,7 +195,7 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     }
 
     // Read the private key from the file
-    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, nullptr);
+    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void*)"password");
 
     // Handle errors
     if (!private_key)
@@ -211,6 +211,176 @@ EVP_PKEY *load_private_key(const char *private_key_file)
 
     return private_key;
 }
+
+bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub) {
+    RSA* rsa = nullptr;
+    BIGNUM* big_num = nullptr;
+    BIO* bio = nullptr;
+    BIO* bio_pub = nullptr;
+
+    // Generate RSA key
+    big_num = BN_new();
+    if (big_num == nullptr) {
+        return false;
+    }
+
+    if (BN_set_word(big_num, RSA_F4) != 1) {
+        BN_free(big_num);
+        return false;
+    }
+
+    rsa = RSA_new();
+    if (rsa == nullptr) {
+        BN_free(big_num);
+        return false;
+    }
+
+    if (RSA_generate_key_ex(rsa, 2048, big_num, nullptr) != 1) {
+        BN_free(big_num);
+        RSA_free(rsa);
+        return false;
+    }
+
+    BN_free(big_num);
+
+    // Extract the private key
+    bio = BIO_new(BIO_s_mem());
+    if (bio == nullptr) {
+        RSA_free(rsa);
+        return false;
+    }
+
+    if (PEM_write_bio_RSAPrivateKey(bio, rsa, nullptr, nullptr, 0, nullptr, nullptr) != 1) {
+        BIO_free_all(bio);
+        RSA_free(rsa);
+        return false;
+    }
+
+    if (PEM_read_bio_PrivateKey(bio, k_priv, nullptr, nullptr) != *k_priv) {
+        BIO_free_all(bio);
+        RSA_free(rsa);
+        return false;
+    }
+
+    BIO_free_all(bio);
+
+    // Extract the public key
+    bio_pub = BIO_new(BIO_s_mem());
+    if (bio_pub == nullptr) {
+        RSA_free(rsa);
+        return false;
+    }
+
+    if (PEM_write_bio_PUBKEY(bio_pub, *k_priv) != 1) {
+        BIO_free_all(bio_pub);
+        RSA_free(rsa);
+        return false;
+    }
+
+    if (PEM_read_bio_PUBKEY(bio_pub, k_pub, nullptr, nullptr) != *k_pub) {
+        BIO_free_all(bio_pub);
+        RSA_free(rsa);
+        return false;
+    }
+
+    BIO_free_all(bio_pub);
+
+    return true;
+}
+
+/**
+ * @brief Serializes a public key to a byte array.
+ *
+ * This function serializes a public key to a byte array.
+ * The byte array is allocated inside the function, and a pointer to it is returned.
+ *
+ * @param public_key      Pointer to an EVP_PKEY structure containing the public key.
+ * @param serialized_key  Pointer to a pointer to an unsigned char array that will contain the serialized key.
+ *
+ * @return                The size of the serialized key, or -1 in case of errors.
+ */
+int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key) {
+    
+    BIO* bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        std::cerr << "Error during BIO creation" << std::endl;
+        return -1;
+    }
+
+    if (!PEM_write_bio_PUBKEY(bio, public_key)) {
+        std::cerr << "Error during PEM_write_bio_PUBKEY" << std::endl;
+        BIO_free_all(bio);
+        return -1;
+    }
+
+    int key_len = BIO_pending(bio);
+    *serialized_key = new unsigned char[key_len];
+
+    if (BIO_read(bio, *serialized_key, key_len) != key_len) {
+        std::cerr << "Error during BIO_read" << std::endl;
+        BIO_free_all(bio);
+        delete[] *serialized_key;
+        return -1;
+    }
+
+    BIO_free_all(bio);
+    return key_len;
+}
+
+/**
+ * @brief Deserializes a public key from a byte array.
+ *
+ * This function deserializes a public key from a byte array.
+ * The byte array is allocated inside the function, and a pointer to it is returned.
+ *
+ * @param serialized_key  Pointer to an unsigned char array containing the serialized key.
+ * @param key_len         The length of the serialized key.
+ *
+ * @return                Pointer to an EVP_PKEY structure containing the public key, or nullptr in case of errors.
+ */
+EVP_PKEY* deserialize_public_key(unsigned char* serialized_key, int key_len) {
+    
+    BIO* bio = BIO_new(BIO_s_mem());
+    if (!bio) {
+        std::cerr << "Error during BIO creation" << std::endl;
+        return nullptr;
+    }
+
+    if (BIO_write(bio, serialized_key, key_len) != key_len) {
+        std::cerr << "Error during BIO_write" << std::endl;
+        BIO_free_all(bio);
+        return nullptr;
+    }
+
+    EVP_PKEY* public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+    if (!public_key) {
+        std::cerr << "Error during PEM_read_bio_PUBKEY" << std::endl;
+        BIO_free_all(bio);
+        return nullptr;
+    }
+
+    BIO_free_all(bio);
+    return public_key;
+}
+
+// TODO: se funziona quella sopra cancellare
+// EVP_PKEY* deserialize_public_key(const unsigned char* serialized_key, const int key_len) {
+//     BIO* bio = BIO_new_mem_buf(serialized_key, key_len);
+//     if (!bio) {
+//         std::cerr << "Error during BIO creation" << std::endl;
+//         return nullptr;
+//     }
+
+//     EVP_PKEY* public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+//     if (!public_key) {
+//         std::cerr << "Error during PEM_read_bio_PUBKEY" << std::endl;
+//         BIO_free_all(bio);
+//         return nullptr;
+//     }
+
+//     BIO_free_all(bio);
+//     return public_key;
+// }
 
 // TODO: Forse serve
 // EVP_PKEY *load_public_key(const char *public_key_file, const char *password)

@@ -7,6 +7,6 @@
 #include "utils.h"
 
 struct sockaddr_in srvAddr;
-const char* ipServer = "127.0.0.1";
-int serverPort = 2;
+const char* ip_server = "127.0.0.1";
+int server_port = 4242;
 int sd, ret;

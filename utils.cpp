@@ -7,7 +7,7 @@ void log_error(const std::string &msg)
 
 /**
  * @brief Frees all allocated buffers in the given buffer array.
- * 
+ *
  * This function iterates through the buffer array and frees all non-null buffers.
  * It also sets their entries in the array to nullptr. The function displays the
  * number of freed buffers upon completion.
@@ -31,7 +31,7 @@ void free_allocated_buffers(unsigned char *buffer_array[])
 
 /**
  * @brief Allocates a new buffer of the specified size and stores it in the given buffer array.
- * 
+ *
  * This function allocates a new buffer of the specified size, initializes it to zero, and stores
  * it in the given buffer array. The new buffer's pointer is returned via the new_buf_ptr parameter.
  * If the buffer array is full or memory allocation fails, the function frees all allocated buffers,
@@ -93,35 +93,14 @@ int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t 
 
 void serialize_int(int input, unsigned char *output)
 {
-    output[0] = input & 0xFF;
-    output[1] = (input >> 8) & 0xFF;
-    output[2] = (input >> 16) & 0xFF;
-    output[3] = (input >> 24) & 0xFF;
+    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+    std::copy(p, p + sizeof(int), output);
 }
 
-// void serialize_int(int input, unsigned char *output)
-// {
-//     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
-//     std::copy(p, p + sizeof(int), output);
-// }
-
-
-// void serialize_longint(long int input, unsigned char *output)
-// {
-//     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
-//     std::copy(p, p + sizeof(long int), output);
-// }
-
-void serialize_longint(long int val, unsigned char *c)
+void serialize_longint(long int input, unsigned char *output)
 {
-    c[0] = val & 0xFF;
-    c[1] = (val >> 8) & 0xFF;
-    c[2] = (val >> 16) & 0xFF;
-    c[3] = (val >> 24) & 0xFF;
-    c[4] = (val >> 32) & 0xFF;
-    c[5] = (val >> 40) & 0xFF;
-    c[6] = (val >> 48) & 0xFF;
-    c[7] = (val >> 56) & 0xFF;
+    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
+    std::copy(p, p + sizeof(long int), output);
 }
 
 /**
@@ -194,4 +173,25 @@ bool isRegistered(std::string_view username)
     }
 
     return false;
+}
+
+int safe_size_t_to_int(size_t value)
+{
+    if (value > static_cast<size_t>(std::numeric_limits<int>::max()))
+    {
+        throw std::runtime_error("Conversion error: size_t value is too large for int");
+    }
+
+    return static_cast<int>(value);
+}
+
+template<typename T>
+void deleteBuffers(T* buffer) {
+    delete[] buffer;
+}
+
+template<typename T, typename... Ts>
+void deleteBuffers(T* buffer, Ts*... buffers) {
+    delete[] buffer;
+    deleteBuffers(buffers...);
 }

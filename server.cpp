@@ -1,13 +1,100 @@
 #include "server.h"
-#include "utils.h"
+
+// Coda dei task per il threadpool
+std::queue<int> task_queue;
+
+// Variabile di condizione per il threadpool
+std::condition_variable task_cv;
+
+// Mutex per la sincronizzazione della coda dei task
+std::mutex task_mutex;
+
+// Numero di thread nel threadpool
+const int NUM_THREADS = 4;
+
+void handle_client(int newSd, NonceList &nonce_list)
+{
+    std::unique_ptr<Session> session(new Session());
+    session->socket = newSd;
+
+    if (receive_message1(session.get(), nonce_list) == false)
+    {
+        std::cerr << "Errore in fase di ricezione del messaggio 1" << std::endl;
+        return;
+    }
+
+    EVP_PKEY *server_private_key = load_private_key("server_file/keys/server_private_key.pem");
+    if (server_private_key == nullptr)
+    {
+        std::cerr << "Errore in fase di caricamento della chiave privata del server" << std::endl;
+        return;
+    }
+
+    if (send_message2(session.get(), server_private_key) == false)
+    {
+        std::cerr << "Errore in fase di invio del messaggio 2" << std::endl;
+        return;
+    }
+
+    if (receive_message3(session.get()) == false)
+    {
+        std::cerr << "Errore in fase di ricezione del messaggio 3" << std::endl;
+        return;
+    }
+
+    std::cout << "Handshake completato per il client " << session->username << std::endl;
+
+    //TODO: cancellare chiavi effimere
+
+    // Gestisco la connessione con il client
+    while (true)
+    {
+        // // Ricevo il messaggio dal client
+        // if (receive_message(session.get()) == false)
+        // {
+        //     std::cerr << "Errore in fase di ricezione del messaggio dal client " << session->username << std::endl;
+        //     break;
+        // }
+
+        // // Invio la risposta al client
+        // if (send_message(session.get()) == false)
+        // {
+        //     std::cerr << "Errore in fase di invio della risposta al client " << session->username << std::endl;
+        //     break;
+        // }
+    }
+
+    // Chiudo la connessione con il client
+    close(newSd);
+}
+
+void thread_func(NonceList &nonce_list)
+{
+    while (true)
+    {
+        // Acquisisco il lock sulla coda dei task
+        std::unique_lock<std::mutex> task_lock(task_mutex);
+
+        // Attendo finché non ci sono task nella coda
+        task_cv.wait(task_lock, []
+                     { return !task_queue.empty(); });
+
+        // Prendo il prossimo task dalla coda
+        int newSd = task_queue.front();
+        task_queue.pop();
+
+        // Rilascio il lock sulla coda dei task
+        task_lock.unlock();
+
+        // Gestisco la connessione con il client
+        handle_client(newSd, nonce_list);
+    }
+}
 
 int main(int argc, char **argv)
 {
-
-    // TODO: Crea la mappa di sessioni
-    std::map<std::string, Session> sessioni;
-    // TODO: Crea la nonce_list
     auto nonce_list = NonceList();
+
     if (argc == 1)
     {
         port = 4242;
@@ -16,7 +103,7 @@ int main(int argc, char **argv)
         port = atoi(argv[1]);
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
-    printf("LOG_INFO: Socket creato correttamente\n");
+    std::cout << "Socket creato correttamente" << std::endl;
     if (sd < 0)
     {
         exit(1);
@@ -35,60 +122,35 @@ int main(int argc, char **argv)
     if (ret < 0)
         exit(-1);
 
+    std::vector<std::thread> threads;
+
+    // Creo il threadpool
+    for (int i = 0; i < NUM_THREADS; i++)
+    {
+        threads.emplace_back(thread_func, std::ref(nonce_list));
+    }
+
     while (true)
     {
         len = sizeof(clAddr);
         newSd = accept(sd, (struct sockaddr *)&clAddr, &len);
-        if (newSd < 0)
+        if (newSd < 0) {
             exit(1);
-
-        pid = fork();
-        if (pid == 0)
-        {
-            if (int closeSd = close(sd); closeSd < 0)
-            {
-                printf("LOG_ERROR: Errore in fase di chiusura del socket\n");
-                exit(1);
-            }
-            else
-            {
-                printf("LOG_INFO: Socket chiuso correttamente\n");
-            }
-
-            auto session = std::make_unique<Session>();
-            session->socket = newSd;
-
-            receive_message1(session.get(), nonce_list);
-            // TODO: Implementare la funzione che legge la chiave privata del server (/server_file/key/server_private_key.pem)
-            // TODO: Leggere la chiave pubblica del client (il file deve essere aperto concatenando il percorso fisso con lo username ricevuto dal client)
-            // TODO: Chiama send_message2
-            EVP_PKEY *server_private_key = load_private_key("server_file/keys/server_private_key.pem");
-            if (server_private_key == nullptr)
-            {
-                printf("LOG_ERROR: Errore in fase di caricamento della chiave privata del server\n");
-                exit(1);
-            }
-
-            if (send_message2(session.get(), server_private_key) == false)
-            {
-                printf("LOG_ERROR: Errore in fase di invio del messaggio 2\n");
-                exit(1);
-            }
-            // EVP_PKEY_free(server_private_key);
-            if (receive_message3(session.get()) == false)
-            {
-                printf("LOG_ERROR: Errore in fase di ricezione del messaggio 3\n");
-                exit(1);
-            }
-            printf("Handshake completato\n");
-            // inserisco session nella mappa
-            sessioni.insert(std::make_pair(session->username, *session));
-
-            // Handshake completato
         }
-        else
-        {
-            close(newSd);
-        }
+
+        // Aggiungo il task alla coda dei task
+        std::lock_guard<std::mutex> task_lock(task_mutex);
+        task_queue.push(newSd);
+
+        // Sveglio uno dei thread del pool
+        task_cv.notify_one();
     }
+
+    // Join di tutti i thread
+    for (auto &thread : threads)
+    {
+        thread.join();
+    }
+
+    return 0;
 }

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include "utils.h"
 
 struct sockaddr_in myAddr, clAddr;
 socklen_t len;

@@ -24,6 +24,13 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
+#include <thread>
+#include <mutex>
+#include <vector>
+#include <queue>
+#include <condition_variable>
+#include <memory>
+#include <cstdarg>
 
 using namespace std;
 
@@ -108,8 +115,22 @@ bool receive_message3(Session *server_session);
 
 // MEMORY HANDLER
 
+#ifndef BUFFER_UTILS_H
+#define BUFFER_UTILS_H
+
+template<typename T>
+void delete_buffers(T* buffer);
+
+template<typename T, typename... Ts>
+void delete_buffers(T* buffer, Ts*... buffers);
+
+#include "buffer_utils.tpp" // Includi le definizioni delle funzioni template
+
+#endif // BUFFER_UTILS_H
+
 void free_allocated_buffers(unsigned char *buffer_array[]);
 int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr);
+int safe_size_t_to_int(size_t value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int val, unsigned char *c);
 
