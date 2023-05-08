@@ -44,7 +44,8 @@ void handle_client(int newSd, NonceList &nonce_list)
 
     std::cout << "Handshake completato per il client " << session->username << std::endl;
 
-    //TODO: cancellare chiavi effimere
+    // Delete the ephemeral key
+    EVP_PKEY_free(session->eph_key_pub);
 
     // Gestisco la connessione con il client
     while (true)

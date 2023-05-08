@@ -50,7 +50,9 @@ int main(int argc, char **argv)
 
     std::cout << "Handshake completato con successo" << std::endl;
 
-    //TODO: cancellare chiavi effimere
+    // Delete the ephemeral keys
+    EVP_PKEY_free(session->eph_key_pub);
+    EVP_PKEY_free(session->eph_key_priv);
 
     // Invio e ricezione messaggi con il server
     while (true)
