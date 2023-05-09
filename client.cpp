@@ -22,39 +22,38 @@ int main(int argc, char **argv)
 
     if (sd < 0 || ret < 0)
     {
-        printf("LOG_ERR: Errore di connesione, sd=%d, ret=%d \n", sd, ret);
+        log_error("Error in connection" + std::to_string(sd) + " " + std::to_string(ret));
         exit(-1);
     }
 
-    // Effettuo l'handshake con il server
+    // Handshake with the server
     auto session = std::make_unique<Session>();
     session->socket = sd;
 
     if (!send_message1(session.get()))
     {
-        std::cerr << "Errore nell'invio del messaggio 1" << std::endl;
+        log_error("Error in sending message 1");
         exit(1);
     }
 
     if (!receive_message2(session.get()))
     {
-        std::cerr << "Errore nella ricezione del messaggio 2" << std::endl;
+        log_error("Error in receiving message 2");
         exit(1);
     }
 
     if (!send_message3(session.get()))
     {
-        std::cerr << "Errore nell'invio del messaggio 3" << std::endl;
+        log_error("Error in sending message 3");
         exit(1);
     }
 
-    std::cout << "Handshake completato con successo" << std::endl;
+    std::cout << "Handshake completed successfully" << std::endl;
 
     // Delete the ephemeral keys
     EVP_PKEY_free(session->eph_key_pub);
     EVP_PKEY_free(session->eph_key_priv);
 
-    // Invio e ricezione messaggi con il server
     while (true)
     {
         // // Leggo il messaggio da tastiera
@@ -80,7 +79,7 @@ int main(int argc, char **argv)
         // std::cout << "Risposta del server: " << response << std::endl;
     }
 
-    // Chiudo la connessione con il server
+    // Close the connection with the server
     close(sd);
     return 0;
 }
