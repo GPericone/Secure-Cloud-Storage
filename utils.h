@@ -124,12 +124,10 @@ void delete_buffers(T* buffer);
 template<typename T, typename... Ts>
 void delete_buffers(T* buffer, Ts*... buffers);
 
-#include "buffer_utils.tpp" // Includi le definizioni delle funzioni template
+#include "buffer_utils.tpp" 
 
-#endif // BUFFER_UTILS_H
+#endif
 
-void free_allocated_buffers(unsigned char *buffer_array[]);
-int allocate_and_store_buffer(unsigned char *buffer_array[], int socket, size_t new_size, unsigned char **new_buf_ptr);
 int safe_size_t_to_int(size_t value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int val, unsigned char *c);
@@ -143,6 +141,9 @@ int load_certificate(std::string filename, X509 **certificate);
 int load_crl(std::string filename, X509_CRL **crl);
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
 int verify_certificate(X509_STORE *store, X509 *certificate);
+
+// ASYMMETRIC KEYS
+
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
 bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub);

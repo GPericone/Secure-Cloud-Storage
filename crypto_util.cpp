@@ -5,15 +5,14 @@
 // --------------------------------------------------------------------------
 
 /**
- * Loads a certificate from file.
+ * @brief Loads a certificate from the specified PEM file.
  *
  * @param filename the name of the file containing the certificate
  * @param certificate pointer to the certificate object to be loaded
- * @return 0 if successful, -1 otherwise
+ * @return int 0 if successful, -1 otherwise
  */
 int load_certificate(std::string filename, X509 **certificate)
 {
-    // Convert filename to a character array, so that it can be used with fopen -> Alternative solution: use fstream
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
@@ -31,11 +30,11 @@ int load_certificate(std::string filename, X509 **certificate)
 }
 
 /**
- * Loads a Certificate Revocation List (CRL) from file.
+ * @brief Loads a CRL from the specified PEM file.
  *
  * @param filename the name of the file containing the CRL
  * @param crl pointer to the CRL object to be loaded
- * @return 0 if successful, -1 otherwise
+ * @return int 0 if successful, -1 otherwise
  */
 int load_crl(std::string filename, X509_CRL **crl)
 {
@@ -56,12 +55,12 @@ int load_crl(std::string filename, X509_CRL **crl)
 }
 
 /**
- * Create an X509_STORE with the given CA certificate and CRL.
+ * @brief Create a store object and add the CA certificate and CRL to it.
  *
- * @param store the address of a pointer to an X509_STORE to be created.
- * @param CA_certificate a pointer to an X509 certificate representing the Certification Authority.
- * @param crl a pointer to an X509_CRL representing the Certificate Revocation List.
- * @return 0 if the store was created successfully, -1 otherwise.
+ * @param store pointer to the store object to be created
+ * @param CA_certificate pointer to the CA certificate
+ * @param crl pointer to the CRL
+ * @return int 0 if successful, -1 otherwise
  */
 int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
@@ -98,11 +97,11 @@ int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 }
 
 /**
- * Verifies if a certificate is valid and trusted by a given certificate store.
+ * @brief Verify the validity of a certificate using the provided store.
  *
- * @param store A pointer to the X509_STORE object representing the certificate store.
- * @param certificate A pointer to the X509 object representing the certificate to verify.
- * @return Returns 0 if the certificate is verified successfully and is trusted, or -1 if an error occurs.
+ * @param store pointer to the store object
+ * @param certificate pointer to the certificate to be verified
+ * @return int 0 if successful, -1 otherwise
  */
 int verify_certificate(X509_STORE *store, X509 *certificate)
 {
@@ -142,16 +141,15 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     return 0;
 }
 
+// --------------------------------------------------------------------------
+// ASYMMETRIC KEYS
+// --------------------------------------------------------------------------
+
 /**
- * @brief Loads a public key from the specified PEM file.
+ * @brief Load a public key from the specified public key file.
  *
- * This function attempts to open and read a public key from the specified PEM file.
- * If the file cannot be opened or the public key cannot be read, an error message
- * is displayed, and the function returns nullptr.
- *
- * @param public_key_file Pointer to a null-terminated string containing the path to the PEM file with the public key.
- *
- * @return                Pointer to an EVP_PKEY structure containing the public key, or nullptr in case of errors.
+ * @param public_key_file the name of the file containing the public key
+ * @return EVP_PKEY* pointer to the public key object
  */
 EVP_PKEY *load_public_key(const char *public_key_file)
 {
@@ -168,21 +166,20 @@ EVP_PKEY *load_public_key(const char *public_key_file)
     if (!public_key)
     {
         std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
+        fclose(pub_key_file);
     }
+
+    // Close the file
+    fclose(pub_key_file);
 
     return public_key;
 }
 
 /**
- * @brief Loads a private key from the specified PEM file.
+ * @brief Load a private key from the specified private key file.
  *
- * This function attempts to open and read a private key from the specified PEM file.
- * If the file cannot be opened or the private key cannot be read, an error message
- * is displayed, and the function returns nullptr.
- *
- * @param private_key_file Pointer to a null-terminated string containing the path to the PEM file with the private key.
- *
- * @return                Pointer to an EVP_PKEY structure containing the private key, or nullptr in case of errors.
+ * @param private_key_file the name of the file containing the private key
+ * @return EVP_PKEY* pointer to the private key object
  */
 EVP_PKEY *load_private_key(const char *private_key_file)
 {
@@ -195,13 +192,11 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     }
 
     // Read the private key from the file
-    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void*)"password");
+    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void *)"password");
 
-    // Handle errors
     if (!private_key)
     {
         std::cerr << "Error reading private key from file: " << private_key_file << std::endl;
-        std::cerr << "OpenSSL error: " << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
         fclose(priv_key_file);
         return nullptr;
     }
@@ -212,79 +207,104 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     return private_key;
 }
 
-bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub) {
-    RSA* rsa = nullptr;
-    BIGNUM* big_num = nullptr;
-    BIO* bio = nullptr;
-    BIO* bio_pub = nullptr;
+/**
+ * @brief Generate an ephemeral key pair.
+ *
+ * @param k_priv the private key to be generated
+ * @param k_pub the public key to be generated
+ * @return true on success, false otherwise
+ */
+bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
+{
+    // Inialize the variables
+    RSA *rsa = nullptr;
+    BIGNUM *big_num = nullptr;
+    BIO *bio = nullptr;
+    BIO *bio_pub = nullptr;
 
     // Generate RSA key
-    big_num = BN_new();
-    if (big_num == nullptr) {
-        return false;
+    big_num = BN_new(); // Create a new BIGNUM instance to hold the RSA public exponent.
+    if (big_num == nullptr)
+    {
+        return false; // Return false if BIGNUM creation fails.
     }
 
-    if (BN_set_word(big_num, RSA_F4) != 1) {
-        BN_free(big_num);
-        return false;
+    // Set the exponent
+    if (BN_set_word(big_num, RSA_F4) != 1) // Set the value of BIGNUM to RSA_F4 (0x10001, or 65537).
+    {
+        BN_free(big_num); // Free the BIGNUM if setting the value fails.
+        return false; // Return false if setting the value fails.
+    }
+    rsa = RSA_new(); // Create a new RSA structure.
+    if (rsa == nullptr)
+    {
+        BN_free(big_num); // Free the BIGNUM if RSA creation fails.
+        return false; // Return false if RSA creation fails.
+    }
+    
+    // Generate an RSA key pair with a length of 2048 bits.
+    if (RSA_generate_key_ex(rsa, 2048, big_num, nullptr) != 1)
+    {
+        BN_free(big_num); // Free the BIGNUM if RSA key pair generation fails.
+        RSA_free(rsa); // Free the RSA structure if RSA key pair generation fails.
+        return false; // Return false if RSA key pair generation fails.
     }
 
-    rsa = RSA_new();
-    if (rsa == nullptr) {
-        BN_free(big_num);
-        return false;
-    }
-
-    if (RSA_generate_key_ex(rsa, 2048, big_num, nullptr) != 1) {
-        BN_free(big_num);
-        RSA_free(rsa);
-        return false;
-    }
-
-    BN_free(big_num);
+    BN_free(big_num); // Free the BIGNUM now as it's no longer needed.
 
     // Extract the private key
-    bio = BIO_new(BIO_s_mem());
-    if (bio == nullptr) {
-        RSA_free(rsa);
-        return false;
+    bio = BIO_new(BIO_s_mem()); // Create a new BIO for input/output operations.
+    if (bio == nullptr)
+    {
+        RSA_free(rsa); // Free the RSA structure if BIO creation fails.
+        return false; // Return false if BIO creation fails.
     }
 
-    if (PEM_write_bio_RSAPrivateKey(bio, rsa, nullptr, nullptr, 0, nullptr, nullptr) != 1) {
-        BIO_free_all(bio);
-        RSA_free(rsa);
-        return false;
+    // Write the RSA private key to the BIO.
+    if (PEM_write_bio_RSAPrivateKey(bio, rsa, nullptr, nullptr, 0, nullptr, nullptr) != 1)
+    {
+        BIO_free_all(bio); // Free the BIO if writing the private key fails.
+        RSA_free(rsa); // Free the RSA structure if writing the private key fails.
+        return false; // Return false if writing the private key fails.
     }
 
-    if (PEM_read_bio_PrivateKey(bio, k_priv, nullptr, nullptr) != *k_priv) {
-        BIO_free_all(bio);
-        RSA_free(rsa);
-        return false;
+    // Read the private key from the BIO into the k_priv pointer.
+    if (PEM_read_bio_PrivateKey(bio, k_priv, nullptr, nullptr) != *k_priv)
+    {
+        BIO_free_all(bio); // Free the BIO if reading the private key fails.
+        RSA_free(rsa); // Free the RSA structure if reading the private key fails.
+        return false; // Return false if reading the private key fails.
     }
 
-    BIO_free_all(bio);
+    BIO_free_all(bio); // Free the BIO now as it's no longer needed.
 
     // Extract the public key
-    bio_pub = BIO_new(BIO_s_mem());
-    if (bio_pub == nullptr) {
-        RSA_free(rsa);
-        return false;
+    bio_pub = BIO_new(BIO_s_mem()); // Create a new BIO for input/output operations.
+    if (bio_pub == nullptr)
+    {
+        RSA_free(rsa); // Free the RSA structure if BIO creation fails.
+        return false; // Return false if BIO creation fails.
     }
 
-    if (PEM_write_bio_PUBKEY(bio_pub, *k_priv) != 1) {
-        BIO_free_all(bio_pub);
-        RSA_free(rsa);
-        return false;
+    // Write the public key from the private key in k_priv to the BIO.
+    if (PEM_write_bio_PUBKEY(bio_pub, *k_priv) != 1)
+    {
+        BIO_free_all(bio_pub); // Free the BIO if writing the public key fails.
+        RSA_free(rsa); // Free the RSA structure if writing the public key fails.
+        return false; // Return false if writing the public key fails.
     }
 
-    if (PEM_read_bio_PUBKEY(bio_pub, k_pub, nullptr, nullptr) != *k_pub) {
-        BIO_free_all(bio_pub);
-        RSA_free(rsa);
-        return false;
+    // Read the public key from the BIO into the k_pub pointer.
+    if (PEM_read_bio_PUBKEY(bio_pub, k_pub, nullptr, nullptr) != *k_pub)
+    {
+        BIO_free_all(bio_pub); // Free the BIO if reading the public key fails.
+        RSA_free(rsa); // Free the RSA structure if reading the public key fails.
+        return false; // Return false if reading the public key fails.
     }
 
-    BIO_free_all(bio_pub);
+    BIO_free_all(bio_pub); // Free the BIO now as it's no longer needed.
 
+    // If all steps complete successfully, return true.
     return true;
 }
 
@@ -299,15 +319,17 @@ bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub) {
  *
  * @return                The size of the serialized key, or -1 in case of errors.
  */
-int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key) {
-    
-    BIO* bio = BIO_new(BIO_s_mem());
-    if (!bio) {
+int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
+{
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (!bio)
+    {
         std::cerr << "Error during BIO creation" << std::endl;
         return -1;
     }
 
-    if (!PEM_write_bio_PUBKEY(bio, public_key)) {
+    if (!PEM_write_bio_PUBKEY(bio, public_key))
+    {
         std::cerr << "Error during PEM_write_bio_PUBKEY" << std::endl;
         BIO_free_all(bio);
         return -1;
@@ -316,7 +338,8 @@ int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key) {
     int key_len = BIO_pending(bio);
     *serialized_key = new unsigned char[key_len];
 
-    if (BIO_read(bio, *serialized_key, key_len) != key_len) {
+    if (BIO_read(bio, *serialized_key, key_len) != key_len)
+    {
         std::cerr << "Error during BIO_read" << std::endl;
         BIO_free_all(bio);
         delete[] *serialized_key;
@@ -338,22 +361,26 @@ int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key) {
  *
  * @return                Pointer to an EVP_PKEY structure containing the public key, or nullptr in case of errors.
  */
-EVP_PKEY* deserialize_public_key(unsigned char* serialized_key, int key_len) {
-    
-    BIO* bio = BIO_new(BIO_s_mem());
-    if (!bio) {
+EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len)
+{
+
+    BIO *bio = BIO_new(BIO_s_mem());
+    if (!bio)
+    {
         std::cerr << "Error during BIO creation" << std::endl;
         return nullptr;
     }
 
-    if (BIO_write(bio, serialized_key, key_len) != key_len) {
+    if (BIO_write(bio, serialized_key, key_len) != key_len)
+    {
         std::cerr << "Error during BIO_write" << std::endl;
         BIO_free_all(bio);
         return nullptr;
     }
 
-    EVP_PKEY* public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
-    if (!public_key) {
+    EVP_PKEY *public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+    if (!public_key)
+    {
         std::cerr << "Error during PEM_read_bio_PUBKEY" << std::endl;
         BIO_free_all(bio);
         return nullptr;
@@ -362,46 +389,6 @@ EVP_PKEY* deserialize_public_key(unsigned char* serialized_key, int key_len) {
     BIO_free_all(bio);
     return public_key;
 }
-
-// TODO: se funziona quella sopra cancellare
-// EVP_PKEY* deserialize_public_key(const unsigned char* serialized_key, const int key_len) {
-//     BIO* bio = BIO_new_mem_buf(serialized_key, key_len);
-//     if (!bio) {
-//         std::cerr << "Error during BIO creation" << std::endl;
-//         return nullptr;
-//     }
-
-//     EVP_PKEY* public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
-//     if (!public_key) {
-//         std::cerr << "Error during PEM_read_bio_PUBKEY" << std::endl;
-//         BIO_free_all(bio);
-//         return nullptr;
-//     }
-
-//     BIO_free_all(bio);
-//     return public_key;
-// }
-
-// TODO: Forse serve
-// EVP_PKEY *load_public_key(const char *public_key_file, const char *password)
-// {
-//     FILE *pub_key_file = fopen(public_key_file, "r");
-//     if (!pub_key_file)
-//     {
-//         std::cerr << "Error opening public key file: " << public_key_file << std::endl;
-//         return nullptr;
-//     }
-
-//     EVP_PKEY *public_key = PEM_read_PUBKEY(pub_key_file, nullptr, (pem_password_cb*)password, nullptr);
-//     fclose(pub_key_file);
-
-//     if (!public_key)
-//     {
-//         std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
-//     }
-
-//     return public_key;
-// }
 
 // --------------------------------------------------------------------------
 // DIGITAL SIGNATURE
@@ -520,6 +507,7 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 // AES-256 GCM
 // --------------------------------------------------------------------------
 
+// The cipher to be used for encryption and decryption
 const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
 /**

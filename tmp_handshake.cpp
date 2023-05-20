@@ -1,7 +1,5 @@
 #include "utils.h"
 
-// TODO: Rimuovere le chiavi effimere dopo la fine dell'handshake
-
 /**
  * @brief Sends a message containing the client's username, a nonce, the client's ephemeral public key and a signature of this informations.
  *
@@ -10,7 +8,7 @@
  * The message is signed using the user's private key.
  *
  * @param client_session The client's session, containing the socket and where the username, nonce, and ephemeral key will be stored.
- * 
+ *
  * @return true on success, false on failure.
  */
 bool send_message1(Session *client_session)
@@ -150,14 +148,14 @@ bool send_message1(Session *client_session)
 
 /**
  * @brief Receives a message containing the client's username, a nonce, the client's ephemeral public key and a signature of this informations.
- * 
+ *
  * This function receives a message from the client over the specified socket.
  * The message includes the user's username, a nonce, and the user's ephemeral public key.
  * The message is signed using the user's private key.
- * 
+ *
  * @param server_session The server's session, containing the socket and where the username, nonce, and ephemeral key will be stored.
  * @param nonce_list The list of nonces, used to prevent replay attacks.
- * 
+ *
  * @return true on success, false on failure.
  */
 bool receive_message1(Session *server_session, NonceList nonce_list)
@@ -330,14 +328,14 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
 
 /**
  * @brief Sends a message containing the server's certificate, a nonce, a session key and a digital envelope containing the session key.
- * 
+ *
  * This function sends a message to the client over the specified socket.
  * The message includes the server's certificate, a nonce, a session key and a digital envelope containing the session key.
  * The message is encrypted using the client's ephemeral public key.
- * 
+ *
  * @param server_session The server's session, containing the socket and the server's ephemeral private key.
  * @param server_private_key The server's private key, used to sign the message.
- * 
+ *
  * @return true  on success, false on failure.
  */
 bool send_message2(Session *server_session, EVP_PKEY *server_private_key)
@@ -504,13 +502,13 @@ bool send_message2(Session *server_session, EVP_PKEY *server_private_key)
 
 /**
  * @brief Receives a message containing the server's certificate, a nonce, a session key and a digital envelope containing the session key.
- * 
+ *
  * This function receives a message from the server over the specified socket.
  * The message includes the server's certificate, a nonce, a session key and a digital envelope containing the session key.
  * The message is encrypted using the client's ephemeral public key.
- * 
+ *
  * @param client_session The client's session, containing the socket and the client's ephemeral private key.
- * 
+ *
  * @return true on success, false on failure.
  */
 bool receive_message2(Session *client_session)
@@ -758,13 +756,13 @@ bool receive_message2(Session *client_session)
 
 /**
  * @brief Sends an encrypted message to the server using AES-GCM.
- * 
+ *
  * This function encrypts a dummy byte using AES-GCM and sends it to the server over the specified socket.
  * The message is encrypted using the session key.
  * In this way, the server knows that the client has successfully decrypted the digital envelope and has obtained the session key.
- * 
+ *
  * @param client_session The client's session, containing the socket and the session key.
- * 
+ *
  * @return true on success, false on failure.
  */
 bool send_message3(Session *client_session)
@@ -828,16 +826,16 @@ bool send_message3(Session *client_session)
 
 /**
  * @brief Receives an encrypted message from the server using AES-GCM.
- * 
+ *
  * @param server_session The server's session, containing the socket and the session key.
- * 
+ *
  * @return true on success, false on failure.
  */
 bool receive_message3(Session *server_session)
 {
     // Allocate buffers for the ciphertext and plaintext
-    unsigned char* ciphertext = new unsigned char[1];
-    unsigned char* plaintext = new unsigned char[1];
+    unsigned char *ciphertext = new unsigned char[1];
+    unsigned char *plaintext = new unsigned char[1];
 
     // Receive the ciphertext
     if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
