@@ -16,7 +16,7 @@ const int NUM_THREADS = 4;
  * @brief handle_client manages the connection with the client.
  *
  * The function performs the handshake with the client and then manages the connection with the client.
- * 
+ *
  * @param newSd the socket descriptor of the client
  * @param nonce_list the list of nonces
  */
@@ -24,6 +24,12 @@ void handle_client(int newSd, NonceList &nonce_list)
 {
     std::unique_ptr<Session> session(new Session());
     session->socket = newSd;
+
+    if (send_message0(session.get()) == false)
+    {
+        log_error("Error in receiving message 0");
+        return;
+    }
 
     if (receive_message1(session.get(), nonce_list) == false)
     {
@@ -34,7 +40,7 @@ void handle_client(int newSd, NonceList &nonce_list)
     // Load the server private key
     char abs_path[PATH_MAX];
     getcwd(abs_path, PATH_MAX);
-    std::string path = std::string(abs_path) + "server_file_keys/server_private_key.pem";
+    std::string path = std::string(abs_path) + "/server_file/keys/server_private_key.pem";
     EVP_PKEY *server_private_key = load_private_key(path.c_str());
     if (server_private_key == nullptr)
     {
@@ -59,33 +65,50 @@ void handle_client(int newSd, NonceList &nonce_list)
     // Delete the ephemeral key
     EVP_PKEY_free(session->eph_key_pub);
 
+    server_command_map["upload"].reset(new UploadServer());
+    server_command_map["download"].reset(new DownloadServer());
+    server_command_map["delete"].reset(new DeleteServer());
+    server_command_map["list"].reset(new ListServer());
+    server_command_map["rename"].reset(new RenameServer());
+    server_command_map["logout"].reset(new LogoutServer());
+
     // Manage the connection with the client
     while (true)
     {
-        // // Ricevo il messaggio dal client
-        // if (receive_message(session.get()) == false)
-        // {
-        //     std::cerr << "Errore in fase di ricezione del messaggio dal client " << session->username << std::endl;
-        //     break;
-        // }
+        std::string command; 
+        // Read the message from the client
+        if (receive_message(session.get(), &command) == false)
+        {
+            log_error("Error in receiving message");
+            break;
+        }
 
-        // // Invio la risposta al client
-        // if (send_message(session.get()) == false)
-        // {
-        //     std::cerr << "Errore in fase di invio della risposta al client " << session->username << std::endl;
-        //     break;
-        // }
+        printf("Comando ricevuto: %s\n", command.c_str());
+
+        if (auto iter = server_command_map.find(command.substr(0, command.find(' '))); iter != server_command_map.end())
+        {
+            if (iter->second->execute(session.get(), command) == false)
+            {
+                break;
+            }
+        }
+        else
+        {
+            printf("Comando non riconosciuto\n");
+            break;
+        }
+    
     }
-
-    // Close the connection with the client
-    close(newSd);
-}
+        session.reset();
+        // Close the connection with the client
+        close(newSd);
+    }
 
 /**
  * @brief thread_func is the function executed by each thread of the threadpool.
- * 
+ *
  * The function waits for a task to be added to the task queue and then executes it.
- * 
+ *
  * @param nonce_list the list of nonces
  */
 void thread_func(NonceList &nonce_list)
@@ -154,7 +177,8 @@ int main(int argc, char **argv)
     {
         len = sizeof(clAddr);
         newSd = accept(sd, (struct sockaddr *)&clAddr, &len);
-        if (newSd < 0) {
+        if (newSd < 0)
+        {
             exit(1);
         }
 

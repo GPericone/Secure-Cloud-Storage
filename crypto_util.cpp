@@ -166,11 +166,7 @@ EVP_PKEY *load_public_key(const char *public_key_file)
     if (!public_key)
     {
         std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
-        fclose(pub_key_file);
     }
-
-    // Close the file
-    fclose(pub_key_file);
 
     return public_key;
 }
@@ -233,21 +229,21 @@ bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
     if (BN_set_word(big_num, RSA_F4) != 1) // Set the value of BIGNUM to RSA_F4 (0x10001, or 65537).
     {
         BN_free(big_num); // Free the BIGNUM if setting the value fails.
-        return false; // Return false if setting the value fails.
+        return false;     // Return false if setting the value fails.
     }
     rsa = RSA_new(); // Create a new RSA structure.
     if (rsa == nullptr)
     {
         BN_free(big_num); // Free the BIGNUM if RSA creation fails.
-        return false; // Return false if RSA creation fails.
+        return false;     // Return false if RSA creation fails.
     }
-    
+
     // Generate an RSA key pair with a length of 2048 bits.
     if (RSA_generate_key_ex(rsa, 2048, big_num, nullptr) != 1)
     {
         BN_free(big_num); // Free the BIGNUM if RSA key pair generation fails.
-        RSA_free(rsa); // Free the RSA structure if RSA key pair generation fails.
-        return false; // Return false if RSA key pair generation fails.
+        RSA_free(rsa);    // Free the RSA structure if RSA key pair generation fails.
+        return false;     // Return false if RSA key pair generation fails.
     }
 
     BN_free(big_num); // Free the BIGNUM now as it's no longer needed.
@@ -257,23 +253,23 @@ bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
     if (bio == nullptr)
     {
         RSA_free(rsa); // Free the RSA structure if BIO creation fails.
-        return false; // Return false if BIO creation fails.
+        return false;  // Return false if BIO creation fails.
     }
 
     // Write the RSA private key to the BIO.
     if (PEM_write_bio_RSAPrivateKey(bio, rsa, nullptr, nullptr, 0, nullptr, nullptr) != 1)
     {
         BIO_free_all(bio); // Free the BIO if writing the private key fails.
-        RSA_free(rsa); // Free the RSA structure if writing the private key fails.
-        return false; // Return false if writing the private key fails.
+        RSA_free(rsa);     // Free the RSA structure if writing the private key fails.
+        return false;      // Return false if writing the private key fails.
     }
 
     // Read the private key from the BIO into the k_priv pointer.
     if (PEM_read_bio_PrivateKey(bio, k_priv, nullptr, nullptr) != *k_priv)
     {
         BIO_free_all(bio); // Free the BIO if reading the private key fails.
-        RSA_free(rsa); // Free the RSA structure if reading the private key fails.
-        return false; // Return false if reading the private key fails.
+        RSA_free(rsa);     // Free the RSA structure if reading the private key fails.
+        return false;      // Return false if reading the private key fails.
     }
 
     BIO_free_all(bio); // Free the BIO now as it's no longer needed.
@@ -283,23 +279,23 @@ bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
     if (bio_pub == nullptr)
     {
         RSA_free(rsa); // Free the RSA structure if BIO creation fails.
-        return false; // Return false if BIO creation fails.
+        return false;  // Return false if BIO creation fails.
     }
 
     // Write the public key from the private key in k_priv to the BIO.
     if (PEM_write_bio_PUBKEY(bio_pub, *k_priv) != 1)
     {
         BIO_free_all(bio_pub); // Free the BIO if writing the public key fails.
-        RSA_free(rsa); // Free the RSA structure if writing the public key fails.
-        return false; // Return false if writing the public key fails.
+        RSA_free(rsa);         // Free the RSA structure if writing the public key fails.
+        return false;          // Return false if writing the public key fails.
     }
 
     // Read the public key from the BIO into the k_pub pointer.
     if (PEM_read_bio_PUBKEY(bio_pub, k_pub, nullptr, nullptr) != *k_pub)
     {
         BIO_free_all(bio_pub); // Free the BIO if reading the public key fails.
-        RSA_free(rsa); // Free the RSA structure if reading the public key fails.
-        return false; // Return false if reading the public key fails.
+        RSA_free(rsa);         // Free the RSA structure if reading the public key fails.
+        return false;          // Return false if reading the public key fails.
     }
 
     BIO_free_all(bio_pub); // Free the BIO now as it's no longer needed.
@@ -817,4 +813,62 @@ int envelope_decrypt(EVP_PKEY *private_key,
     EVP_CIPHER_CTX_free(ctx);
 
     return plaintext_len;
+}
+
+bool rsaEncrypt(const unsigned char *plaintext, size_t plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, size_t &ciphertextLength)
+{
+    RSA *rsaKey = EVP_PKEY_get1_RSA(publicKey);
+    if (!rsaKey)
+    {
+        std::cerr << "Error extracting RSA key from EVP_PKEY." << std::endl;
+        return false;
+    }
+
+    int rsaKeySize = RSA_size(rsaKey);
+    ciphertext = new unsigned char[rsaKeySize];
+
+    int result = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_PADDING);
+    if (result == -1)
+    {
+        std::cerr << "Error encrypting with RSA." << std::endl;
+        ERR_print_errors_fp(stderr);
+        RSA_free(rsaKey);
+        delete[] ciphertext;
+        return false;
+    }
+
+    ciphertextLength = result;
+
+    RSA_free(rsaKey);
+
+    return true;
+}
+
+bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, size_t &plaintextLength)
+{
+    RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
+    if (!rsaKey)
+    {
+        std::cerr << "Error getting RSA key from EVP_PKEY." << std::endl;
+        return false;
+    }
+
+    int rsaKeySize = RSA_size(rsaKey);
+    plaintext = new unsigned char[rsaKeySize];
+
+    int result = RSA_private_decrypt(ciphertextLength, ciphertext, plaintext, rsaKey, RSA_PKCS1_PADDING);
+    if (result == -1)
+    {
+        std::cerr << "Error decrypting with RSA." << std::endl;
+        ERR_print_errors_fp(stderr);
+        RSA_free(rsaKey);
+        delete[] plaintext;
+        return false;
+    }
+
+    plaintextLength = result;
+
+    RSA_free(rsaKey);
+
+    return true;
 }

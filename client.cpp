@@ -3,11 +3,13 @@
 int main(int argc, char **argv)
 {
 
- if (argc != 1)
+    if (argc != 1)
     {
         ip_server = argv[1];
         server_port = atoi(argv[2]);
-    } else {
+    }
+    else
+    {
         server_port = 4242;
     }
 
@@ -26,9 +28,15 @@ int main(int argc, char **argv)
         exit(-1);
     }
 
-    // Handshake with the server
-    auto session = std::make_unique<Session>();
+    // Effettuo l'handshake con il server
+    std::unique_ptr<Session> session(new Session());
     session->socket = sd;
+
+    if (!receive_message0(session.get()))
+    {
+        log_error("Error in receiving message 0");
+        exit(1);
+    }
 
     if (!send_message1(session.get()))
     {
@@ -54,32 +62,54 @@ int main(int argc, char **argv)
     EVP_PKEY_free(session->eph_key_pub);
     EVP_PKEY_free(session->eph_key_priv);
 
+    client_command_map["upload"].reset(new UploadClient());
+    client_command_map["download"].reset(new DownloadClient());
+    client_command_map["delete"].reset(new DeleteClient());
+    client_command_map["list"].reset(new ListClient());
+    client_command_map["rename"].reset(new RenameClient());
+    client_command_map["logout"].reset(new LogoutClient());
+
+    // Invio e ricezione messaggi con il server
+    std::cout << message << std::endl;
     while (true)
     {
-        // // Leggo il messaggio da tastiera
-        // std::string input;
-        // std::getline(std::cin, input);
+        // Leggo il messaggio da tastiera
+        // printf("Inserisci un comando: ");
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-        // // Invio il messaggio al server
-        // if (!send_message(session.get(), input))
-        // {
-        //     std::cerr << "Errore nell'invio del messaggio al server" << std::endl;
-        //     break;
-        // }
+        std::string command;
+        std::cout << "> ";
+        // Elimina eventuali errori di sincronizzazione
+        std::cin.sync();
+        // Legge l'intera riga di input
+        std::getline(std::cin, command);
+        std::cout << std::endl;
 
-        // // Ricevo la risposta del server
-        // std::string response;
-        // if (!receive_message(session.get(), response))
-        // {
-        //     std::cerr << "Errore nella ricezione della risposta dal server" << std::endl;
-        //     break;
-        // }
+        std::cout << "Il comando inserito è: " << command << std::endl;
 
-        // // Stampo la risposta del server a schermo
-        // std::cout << "Risposta del server: " << response << std::endl;
+        if (!send_message(session.get(), command))
+        {
+            log_error("Error in sending message");
+            break;
+        }
+
+        // Cerca il comando nella mappa
+        if (auto iter = client_command_map.find(command.substr(0, command.find(' '))); iter != client_command_map.end())
+        {
+            if (iter->second->execute(session.get(), command) == false)
+            {
+                break;
+            }
+        }
+        else
+        {
+            printf("Comando non riconosciuto\n");
+        }
+        std::cout << "Operazione conclusa con successo, premi INVIO per continuare..." << std::endl;
     }
+    session.reset();
 
-    // Close the connection with the server
+    // Chiudo la connessione con il server
     close(sd);
     return 0;
 }
