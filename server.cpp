@@ -20,7 +20,7 @@ const int NUM_THREADS = 4;
  * @param newSd the socket descriptor of the client
  * @param nonce_list the list of nonces
  */
-void handle_client(int newSd, NonceList &nonce_list)
+void handle_client(int newSd)
 {
     std::unique_ptr<Session> session(new Session());
     session->socket = newSd;
@@ -31,7 +31,7 @@ void handle_client(int newSd, NonceList &nonce_list)
         return;
     }
 
-    if (receive_message1(session.get(), nonce_list) == false)
+    if (receive_message1(session.get()) == false)
     {
         log_error("Error in receiving message 1");
         return;
@@ -111,7 +111,7 @@ void handle_client(int newSd, NonceList &nonce_list)
  *
  * @param nonce_list the list of nonces
  */
-void thread_func(NonceList &nonce_list)
+void thread_func()
 {
     while (true)
     {
@@ -130,14 +130,12 @@ void thread_func(NonceList &nonce_list)
         task_lock.unlock();
 
         // Manage the connection with the client
-        handle_client(newSd, nonce_list);
+        handle_client(newSd);
     }
 }
 
 int main(int argc, char **argv)
 {
-    auto nonce_list = NonceList();
-
     if (argc == 1)
     {
         port = 4242;
@@ -170,7 +168,7 @@ int main(int argc, char **argv)
     // Create the threadpool
     for (int i = 0; i < NUM_THREADS; i++)
     {
-        threads.emplace_back(thread_func, std::ref(nonce_list));
+        threads.emplace_back(thread_func);
     }
 
     while (true)

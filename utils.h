@@ -32,10 +32,13 @@
 #include <memory>
 #include <cstdarg>
 
+
 using namespace std;
 
 // #define USERNAMESIZE 25
 // #define NONCE_LEN 16
+
+const int CHUNK_SIZE = 10000;
 
 const int MAX_BUF_SIZE = 65536;
 const size_t MAX_PATH = 512;
@@ -56,6 +59,7 @@ struct Session
     EVP_PKEY *eph_key_priv;
     EVP_PKEY *eph_key_pub;
     int socket;
+    int counter = 0;
     // TODO: Aggiungere i counter per le funzioni
 };
 
@@ -102,12 +106,103 @@ public:
     }
 };
 
+class CommandClient
+{
+public:
+    virtual ~CommandClient() = default;
+    virtual bool execute(Session *session, const std::string command) = 0;
+};
+
+class UploadClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class DownloadClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class DeleteClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class ListClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class RenameClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class LogoutClient : public CommandClient
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+bool send_message(Session *client_session, const std::string payload);
+bool send_message(Session *session, const std::string payload, bool send_esito, int esito);
+bool receive_message(Session *server_session, std::string *payload);
+bool receive_message(Session *server_session, std::string *payload, bool receive_esito, int *esito);
+class CommandServer
+{
+public:
+    virtual ~CommandServer() = default;
+    virtual bool execute(Session *session, const std::string command) = 0;
+};
+
+class UploadServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class DownloadServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class DeleteServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class ListServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class RenameServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
+
+class LogoutServer : public CommandServer
+{
+public:
+    bool execute(Session *session, const std::string command) override;
+};
 // USER
 bool isRegistered(std::string_view username);
 
 // MANAGE MESSAGES
+bool send_message0(Session *server_session);
+bool receive_message0(Session *client_session);
 bool send_message1(Session *client_session);
-bool receive_message1(Session *server_session, NonceList nonce_list);
+bool receive_message1(Session *server_session);
 bool send_message2(Session *server_session, EVP_PKEY *server_private_key);
 bool receive_message2(Session *client_session);
 bool send_message3(Session *client_session);
@@ -118,13 +213,13 @@ bool receive_message3(Session *server_session);
 #ifndef BUFFER_UTILS_H
 #define BUFFER_UTILS_H
 
-template<typename T>
-void delete_buffers(T* buffer);
+template <typename T>
+void delete_buffers(T *buffer);
 
-template<typename T, typename... Ts>
-void delete_buffers(T* buffer, Ts*... buffers);
+template <typename T, typename... Ts>
+void delete_buffers(T *buffer, Ts *...buffers);
 
-#include "buffer_utils.tpp" 
+#include "buffer_utils.tpp"
 
 #endif
 
@@ -146,9 +241,9 @@ int verify_certificate(X509_STORE *store, X509 *certificate);
 
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
-bool generateEphKeys(EVP_PKEY** k_priv, EVP_PKEY** k_pub);
-int serialize_public_key(EVP_PKEY* public_key, unsigned char** serialized_key);
-EVP_PKEY* deserialize_public_key(unsigned char* serialized_key, int key_len);
+bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub);
+int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key);
+EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len);
 
 // DIGITAL SIGNATURE
 
@@ -188,16 +283,8 @@ int envelope_decrypt(EVP_PKEY *private_key,
                      int sym_key_len,
                      unsigned char *iv,
                      unsigned char *plaintext);
+
+bool rsaEncrypt(const unsigned char* plaintext, size_t plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, size_t& ciphertextLength);
+bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, size_t &plaintextLength);
+
 #endif
-
-// #include <map>
-
-// // Crea una mappa per indicizzare le sessioni per nome utente
-// std::map<unsigned char, Sessione> sessioni;
-
-// // Aggiungi una sessione alla mappa
-// Sessione miaSessione = { 'user123', 'nonce123', 'aeskey123', 123 };
-// sessioni[miaSessione.username] = miaSessione;
-
-// // Accedi alla sessione per nome utente
-// Sessione sessioneUtente = sessioni['user123'];

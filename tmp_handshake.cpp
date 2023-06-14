@@ -196,7 +196,7 @@ bool send_message1(Session *client_session)
  *
  * @return true on success, false on failure.
  */
-bool receive_message1(Session *server_session, NonceList nonce_list)
+bool receive_message1(Session *server_session)
 {
 
     // Read payload length from the socket and deserialize it
@@ -354,20 +354,7 @@ bool receive_message1(Session *server_session, NonceList nonce_list)
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
-
-    // Check if the nonce is already present in the nonce list
-    if (nonce_list.contains(nonce))
-    {
-        log_error("Nonce already present");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
-        EVP_PKEY_free(client_public_key);
-        EVP_PKEY_free(eph_key_pub);
-        return false;
-    }
-
-    // Add nonce to nonce list in order to prevent replay attacks
-    nonce_list.insert(nonce);
-
+    
     // Add nonce to server session in order to retrieve it later
     memcpy(server_session->nonceClient, nonce, NONCE_LEN);
 
