@@ -31,14 +31,14 @@
 #include <condition_variable>
 #include <memory>
 #include <cstdarg>
-
+#include <sys/stat.h>
 
 using namespace std;
 
 // #define USERNAMESIZE 25
 // #define NONCE_LEN 16
 
-const int CHUNK_SIZE = 10000;
+const int CHUNK_SIZE = 1000000;
 
 const int MAX_BUF_SIZE = 65536;
 const size_t MAX_PATH = 512;
@@ -225,7 +225,7 @@ void delete_buffers(T *buffer, Ts *...buffers);
 
 int safe_size_t_to_int(size_t value);
 void serialize_int(int input, unsigned char *output);
-void serialize_longint(long int val, unsigned char *c);
+void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size);
 
 int recv_all(int socket, void *buffer, ssize_t len);
 void log_error(const std::string &msg);

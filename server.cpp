@@ -62,6 +62,22 @@ void handle_client(int newSd)
 
     std::cout << "Handshake completed for client " << session->username << std::endl;
 
+    //se non esiste la cartella dell'utente la crea
+    std::string username_folder = "server_file/users/" + session->username;
+    if (int result = mkdir(username_folder.c_str(), 0777); result == 0)
+    {
+        std::cout << "Cartella creata: " << username_folder.c_str() << std::endl;
+    }
+    else if (errno == EEXIST)
+    {
+        std::cout << "La cartella esiste già: " << username_folder.c_str() << std::endl;
+    }
+    else
+    {
+        std::cout << "Errore durante la creazione della cartella: " << username_folder.c_str() << result << errno << std::endl;
+        return;
+    }
+
     // Delete the ephemeral key
     EVP_PKEY_free(session->eph_key_pub);
 
@@ -75,7 +91,7 @@ void handle_client(int newSd)
     // Manage the connection with the client
     while (true)
     {
-        std::string command; 
+        std::string command;
         // Read the message from the client
         if (receive_message(session.get(), &command) == false)
         {
@@ -99,10 +115,10 @@ void handle_client(int newSd)
         }
     
     }
-        session.reset();
-        // Close the connection with the client
-        close(newSd);
-    }
+    session.reset();
+    // Close the connection with the client
+    close(newSd);
+}
 
 /**
  * @brief thread_func is the function executed by each thread of the threadpool.

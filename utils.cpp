@@ -23,10 +23,36 @@ void serialize_int(int input, unsigned char *output)
  * @param input the long integer to be serialized
  * @param output the buffer where the serialized long integer should be stored
  */
-void serialize_longint(long int input, unsigned char *output)
+
+void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size)
 {
-    unsigned char *p = reinterpret_cast<unsigned char *>(&input);
-    std::copy(p, p + sizeof(long int), output);
+    if (buffer_size >= sizeof(long int)) {
+        std::memcpy(buffer, &value, sizeof(long int));
+    }
+    else {
+        std::cout << "Dimensione del buffer insufficiente!" << std::endl;
+    }
+}
+
+bool deserializeNumber(const unsigned char *buffer, long int *result)
+{
+    if (buffer == nullptr || result == nullptr)
+    {
+        return false; // Controllo di validità dei puntatori
+    }
+
+    *result = 0;
+
+    for (int i = 0; i < sizeof(long int); i++)
+    {
+        if (buffer[i] == '\0')
+        {
+            break; // Interrompi la deserializzazione se viene trovato un carattere di fine stringa
+        }
+        *result |= static_cast<long int>(buffer[i]) << (8 * i);
+    }
+
+    return true;
 }
 
 /**
@@ -66,10 +92,9 @@ int recv_all(int socket, void *buffer, ssize_t len)
 
         bytes_left -= bytes_read;
         buffer_ptr += bytes_read;
-
-        return len - bytes_left;
+        
     }
-    return -1;
+    return len - bytes_left;
 }
 
 /**
@@ -165,11 +190,11 @@ bool send_file(Session *session, std::string const &file_path)
 
     // Leggi il file a blocchi di 1 MB alla volta e invia ogni blocco
     std::string buffer;
+    // int file_size = get_file_size_no_ext(file_path);
     auto file_size = (double)std::filesystem::file_size(file_path);
     int num_sends = static_cast<int>((file_size + CHUNK_SIZE - 1) / CHUNK_SIZE);
     for (int i = 0; i < num_sends; ++i)
     {
-        // pulisco il buffer;
         int esito = 1;
         auto bytes_to_read = CHUNK_SIZE;
         if (i == num_sends - 1)
@@ -182,9 +207,11 @@ bool send_file(Session *session, std::string const &file_path)
         if (!send_message(session, buffer, true, esito)) // inviare il flag finale solo per l'ultimo chunk
         {
             std::cerr << "Errore durante l'invio del file " << file_path << std::endl;
-            buffer.clear();
+            buffer.clear();  
+            input_file.close();
             return false;
         }
+        // pulisco il buffer;
         buffer.clear();
     }
 
@@ -250,36 +277,36 @@ bool send_message(Session *session, const std::string payload)
 
 bool send_message(Session *session, const std::string payload, bool send_esito, int esito)
 {
-    // Serialize the username length
-    unsigned char *command_len_byte = new unsigned char[sizeof(int)];
-    serialize_int(safe_size_t_to_int(payload.size()), command_len_byte);
+    // Serialize the command length
+    unsigned char *command_len_byte = new unsigned char[sizeof(long int)];
+    serialize_longint(payload.size(), command_len_byte, sizeof(long int));
 
     // Serialize the counter
     unsigned char counter_byte[sizeof(int)];
     serialize_int(session->counter + 1, counter_byte);
 
     // Calculate message size and allocate the buffer
-    int message_size = sizeof(int) + sizeof(int) + payload.size();
+    int message_size = sizeof(long int) + sizeof(int) + payload.size();
     if (send_esito)
     {
         message_size += sizeof(int);
     }
     unsigned char *message = new unsigned char[message_size];
 
-    // Construct the message: length_payload | counter | command
+    // Construct the message: length_payload | counter | esito* | command
     memcpy(message, command_len_byte, sizeof(int));
-    memcpy(message + sizeof(int), counter_byte, sizeof(int));
+    memcpy(message + sizeof(long int), counter_byte, sizeof(int));
     // if send_esito send esito
     if (send_esito)
     {
         unsigned char esito_byte[sizeof(int)];
         serialize_int(esito, esito_byte);
-        memcpy(message + sizeof(int) * 2, esito_byte, sizeof(int));
-        memcpy(message + sizeof(int) * 3, payload.c_str(), payload.size());
+        memcpy(message + sizeof(long int) + sizeof(int), esito_byte, sizeof(int));
+        memcpy(message + sizeof(long int) + sizeof(int) * 2, payload.c_str(), payload.size());
     }
     else
     {
-        memcpy(message + sizeof(int) * 2, payload.c_str(), payload.size());
+        memcpy(message + sizeof(long int) + sizeof(int), payload.c_str(), payload.size());
     }
 
     // Send the message
@@ -347,7 +374,7 @@ bool UploadClient::execute(Session *session, std::string command)
         return true;
     }
 
-    std::string file_to_upload = tokens[1];
+    std::string file_to_upload = "client_file/users/" + session->username + "/" + tokens[1];
 
     printf("file_to_upload: %s\n", file_to_upload.c_str());
 
@@ -398,7 +425,7 @@ bool DownloadClient::execute(Session *session, std::string command)
 
     std::cout << response_existance;
 
-    std::string file_to_download = tokens[1];
+    std::string file_to_download = "client_file/users/" + session->username + "/" + tokens[1];
 
     if (exists == 1)
     {
@@ -409,7 +436,7 @@ bool DownloadClient::execute(Session *session, std::string command)
         std::string response;
         send_message(session, esito);
 
-        std::ofstream output_file("download/" + file_to_download, std::ios::binary);
+        std::ofstream output_file(file_to_download, std::ios::binary);
         if (!output_file)
         {
             std::cerr << "Errore durante la creazione del file " << file_to_download << std::endl;
@@ -512,15 +539,16 @@ bool receive_message(Session *server_session, std::string *payload)
 bool receive_message(Session *server_session, std::string *payload, bool receive_esito, int *esito)
 {
     // Read the payload length from the socket
-    int message_len;
-    unsigned char *message_len_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(server_session->socket, (void *)message_len_byte, sizeof(int))) != sizeof(int))
+    long int message_len;
+    unsigned char *message_len_byte = new unsigned char[sizeof(long int)];
+    if ((recv_all(server_session->socket, (void *)message_len_byte, sizeof(long int))) != sizeof(long int))
     {
         log_error("Failed to read payload length");
         delete_buffers(message_len_byte);
         return false;
     }
-    memcpy(&message_len, message_len_byte, sizeof(int));
+    deserializeNumber(message_len_byte, &message_len);
+    printf("Message length: %ld\n", message_len);
 
     // Read the counter from the socket
     int counter;
@@ -609,7 +637,7 @@ bool UploadServer::execute(Session *session, std::string command)
 
     if (valido == 1)
     {
-        std::ofstream output_file("upload/" + file_to_upload, std::ios::binary);
+        std::ofstream output_file("server_file/users/"+ session->username + "/" + file_to_upload, std::ios::binary);
         if (!output_file)
         {
             std::cerr << "Errore durante la creazione del file " << file_to_upload << std::endl;
@@ -698,7 +726,7 @@ bool DownloadServer::execute(Session *session, std::string command)
         return true;
     }
 
-    std::string file_to_download = tokens[1];
+    std::string file_to_download = "server_file/users/" + session->username + "/" + tokens[1];
 
     printf("file_to_download: %s\n", file_to_download.c_str());
 
@@ -773,7 +801,7 @@ bool DeleteServer::execute(Session *session, std::string command)
         return true;
     }
 
-    std::string file_to_delete = tokens[1];
+    std::string file_to_delete = "server_file/users/" + session->username + "/" + tokens[1];
 
     printf("file_to_delete: %s\n", file_to_delete.c_str());
 
@@ -803,7 +831,7 @@ bool DeleteServer::execute(Session *session, std::string command)
 
 bool ListServer::execute(Session *session, std::string command)
 {
-    std::string path = ".";
+    std::string path = "server_file/users/" + session->username;
     DIR *folder = opendir(path.c_str());
     if (path.empty() || !folder)
     {
@@ -879,8 +907,8 @@ bool RenameServer::execute(Session *session, std::string command)
         return true;
     }
 
-    std::string old_name = tokens[1];
-    std::string new_name = tokens[2];
+    std::string old_name = "server_file/users/" + session->username + "/" + tokens[1];
+    std::string new_name = "server_file/users/" + session->username + "/" + tokens[2];
 
     printf("old_name: %s\n", old_name.c_str());
     printf("new_name: %s\n", new_name.c_str());
