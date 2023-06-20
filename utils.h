@@ -32,6 +32,7 @@
 #include <memory>
 #include <cstdarg>
 #include <sys/stat.h>
+#include <regex>
 
 using namespace std;
 
@@ -47,6 +48,7 @@ const size_t TAG_LEN = 16;
 const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const size_t USERNAMESIZE = 25;
 const std::string F_NAME = "users.csv";
+const std::regex pattern("[A-Za-z0-9_. -]+");
 
 // SESSION STRUCT
 struct Session

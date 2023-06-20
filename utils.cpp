@@ -26,10 +26,12 @@ void serialize_int(int input, unsigned char *output)
 
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size)
 {
-    if (buffer_size >= sizeof(long int)) {
+    if (buffer_size >= sizeof(long int))
+    {
         std::memcpy(buffer, &value, sizeof(long int));
     }
-    else {
+    else
+    {
         std::cout << "Dimensione del buffer insufficiente!" << std::endl;
     }
 }
@@ -92,7 +94,6 @@ int recv_all(int socket, void *buffer, ssize_t len)
 
         bytes_left -= bytes_read;
         buffer_ptr += bytes_read;
-        
     }
     return len - bytes_left;
 }
@@ -207,7 +208,7 @@ bool send_file(Session *session, std::string const &file_path)
         if (!send_message(session, buffer, true, esito)) // inviare il flag finale solo per l'ultimo chunk
         {
             std::cerr << "Errore durante l'invio del file " << file_path << std::endl;
-            buffer.clear();  
+            buffer.clear();
             input_file.close();
             return false;
         }
@@ -277,43 +278,63 @@ bool send_message(Session *session, const std::string payload)
 
 bool send_message(Session *session, const std::string payload, bool send_esito, int esito)
 {
+    int aad_len = sizeof(int) + ((send_esito) ? sizeof(int) : 0);
+    unsigned char *plaintext = new unsigned char[payload.size()];
+    unsigned char *aad = new unsigned char[aad_len];
+    unsigned char *iv = new unsigned char[IV_LEN];
+    unsigned char *tag = new unsigned char[TAG_LEN];
+    unsigned char *ciphertext = new unsigned char[payload.size()];
+
     // Serialize the command length
     unsigned char *command_len_byte = new unsigned char[sizeof(long int)];
     serialize_longint(payload.size(), command_len_byte, sizeof(long int));
 
     // Serialize the counter
-    unsigned char counter_byte[sizeof(int)];
+    unsigned char *counter_byte = new unsigned char[sizeof(int)];
     serialize_int(session->counter + 1, counter_byte);
 
-    // Calculate message size and allocate the buffer
-    int message_size = sizeof(long int) + sizeof(int) + payload.size();
+    memcpy(aad, counter_byte, sizeof(int));
     if (send_esito)
     {
-        message_size += sizeof(int);
-    }
-    unsigned char *message = new unsigned char[message_size];
-
-    // Construct the message: length_payload | counter | esito* | command
-    memcpy(message, command_len_byte, sizeof(int));
-    memcpy(message + sizeof(long int), counter_byte, sizeof(int));
-    // if send_esito send esito
-    if (send_esito)
-    {
-        unsigned char esito_byte[sizeof(int)];
+        unsigned char *esito_byte = new unsigned char[sizeof(int)];
         serialize_int(esito, esito_byte);
-        memcpy(message + sizeof(long int) + sizeof(int), esito_byte, sizeof(int));
-        memcpy(message + sizeof(long int) + sizeof(int) * 2, payload.c_str(), payload.size());
+        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
+        delete_buffers(esito_byte);
     }
-    else
+    memcpy(plaintext, payload.c_str(), payload.size());
+
+    // Generate a random IV
+    if (!RAND_bytes(iv, safe_size_t_to_int(IV_LEN)))
     {
-        memcpy(message + sizeof(long int) + sizeof(int), payload.c_str(), payload.size());
+        log_error("Error generating IV");
+        delete_buffers(plaintext, aad, iv, tag, command_len_byte, counter_byte);
+        return false;
     }
+
+    // Encrypt the message using AES-GCM
+    int ciphertext_len = aesgcm_encrypt(plaintext, safe_size_t_to_int(payload.size()), aad, aad_len, session->aes_key, iv, safe_size_t_to_int(IV_LEN), ciphertext, tag);
+    if (ciphertext_len < 0)
+    {
+        log_error("Error encrypting message");
+        delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte);
+        return false;
+    }
+
+    int message_size = sizeof(long int) + aad_len + ciphertext_len + TAG_LEN + IV_LEN;
+
+    unsigned char *message = new unsigned char[message_size];
+    // message: payload_len | counter | esito* | payload | tag | iv
+    memcpy(message, command_len_byte, sizeof(int));
+    memcpy(message + sizeof(long int), aad, aad_len);
+    memcpy(message + sizeof(long int) + aad_len, ciphertext, ciphertext_len);
+    memcpy(message + sizeof(long int) + aad_len + ciphertext_len, tag, TAG_LEN);
+    memcpy(message + sizeof(long int) + aad_len + ciphertext_len + TAG_LEN, iv, IV_LEN);
 
     // Send the message
     if (send(session->socket, message, message_size, 0) < 0)
     {
         log_error("Error sending message");
-        delete_buffers(command_len_byte, message);
+        delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte, message);
         return false;
     }
 
@@ -321,7 +342,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     session->counter++;
 
     // Clean up and return
-    delete_buffers(command_len_byte, message);
+    delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte, message);
     return true;
 }
 
@@ -550,13 +571,17 @@ bool receive_message(Session *server_session, std::string *payload, bool receive
     deserializeNumber(message_len_byte, &message_len);
     printf("Message length: %ld\n", message_len);
 
+    // Allocate buffers for the ciphertext and plaintext
+    unsigned char *ciphertext = new unsigned char[message_len];
+    unsigned char *plaintext = new unsigned char[message_len];
+
     // Read the counter from the socket
     int counter;
     unsigned char *counter_byte = new unsigned char[sizeof(int)];
     if ((recv_all(server_session->socket, (void *)counter_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read counter");
-        delete_buffers(message_len_byte, counter_byte);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
         return false;
     }
     memcpy(&counter, counter_byte, sizeof(int));
@@ -565,36 +590,73 @@ bool receive_message(Session *server_session, std::string *payload, bool receive
     if (counter != server_session->counter + 1)
     {
         log_error("Counter mismatch");
-        delete_buffers(message_len_byte, counter_byte);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
         return false;
     }
 
     server_session->counter++;
 
+    unsigned char *esito_byte = new unsigned char[sizeof(int)];
     if (receive_esito)
     {
-        unsigned char *esito_byte = new unsigned char[sizeof(int)];
         if ((recv_all(server_session->socket, (void *)esito_byte, sizeof(int))) != sizeof(int))
         {
             log_error("Failed to read esito");
-            delete_buffers(message_len_byte, counter_byte, esito_byte);
+            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
             return false;
         }
         memcpy(esito, esito_byte, sizeof(int));
     }
 
-    // Read the command from the socket
-    unsigned char *message = new unsigned char[message_len];
-    if (recv_all(server_session->socket, (void *)message, message_len) != message_len)
+    int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
+    unsigned char *aad = new unsigned char[aad_len];
+    memcpy(aad, counter_byte, sizeof(int));
+    if (receive_esito)
     {
-        log_error("Failed to receive the payload");
-        delete_buffers(message_len_byte, counter_byte);
+        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
+        delete_buffers(esito_byte);
+    }
+    // Allocate buffers for the tag
+    unsigned char *tag = new unsigned char[TAG_LEN];
+
+    // Receive the ciphertext
+    if (recv_all(server_session->socket, (void *)ciphertext, message_len) != message_len)
+    {
+        log_error("Error receiving ciphertext");
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
         return false;
     }
 
-    *payload = std::string(reinterpret_cast<char *>(message), message_len);
+    // Receive the tag
+    if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
+    {
+        log_error("Error receiving tag");
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
+        return false;
+    }
 
-    delete_buffers(message_len_byte, counter_byte);
+    // Allocate buffers for the IV
+    unsigned char *iv = new unsigned char[IV_LEN];
+
+    // Receive the IV
+    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
+    {
+        log_error("Error receiving IV");
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
+        return false;
+    }
+
+    // Decrypt the message
+    int plaintext_len = aesgcm_decrypt(ciphertext, message_len, aad, aad_len, tag, server_session->aes_key, iv, safe_size_t_to_int(IV_LEN), plaintext);
+    if (plaintext_len < 0)
+    {
+        log_error("Error decrypting message");
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
+        return false;
+    }
+
+    *payload = std::string(reinterpret_cast<char *>(plaintext), message_len);
+    delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
     return true;
 }
 
@@ -637,7 +699,7 @@ bool UploadServer::execute(Session *session, std::string command)
 
     if (valido == 1)
     {
-        std::ofstream output_file("server_file/users/"+ session->username + "/" + file_to_upload, std::ios::binary);
+        std::ofstream output_file("server_file/users/" + session->username + "/" + file_to_upload, std::ios::binary);
         if (!output_file)
         {
             std::cerr << "Errore durante la creazione del file " << file_to_upload << std::endl;
@@ -730,8 +792,8 @@ bool DownloadServer::execute(Session *session, std::string command)
 
     printf("file_to_download: %s\n", file_to_download.c_str());
 
-    std::string response_existance;
-    bool exists = check_availability_to_download(file_to_download, &response_existance);
+    std::string response_existance = "Il nome del file non rispetta i requisiti previsti, riprova\n";
+    bool exists = std::regex_match(tokens[1], pattern) && check_availability_to_download(file_to_download, &response_existance);
     send_message(session, response_existance, true, exists);
 
     if (exists)
