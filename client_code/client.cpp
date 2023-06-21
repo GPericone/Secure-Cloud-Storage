@@ -1,7 +1,11 @@
-#include "client.h"
+#include "utils.h"
 
 int main(int argc, char **argv)
 {
+    struct sockaddr_in srv_addr;
+    const char *ip_server = "127.0.0.1";
+    int server_port = 4242;
+    int sd, ret;
 
     if (argc != 1)
     {
@@ -16,11 +20,11 @@ int main(int argc, char **argv)
     // Create socket
     sd = socket(AF_INET, SOCK_STREAM, 0);
 
-    memset(&srvAddr, 0, sizeof(srvAddr));
-    srvAddr.sin_family = AF_INET;
-    srvAddr.sin_port = htons(server_port);
-    inet_pton(AF_INET, ip_server, &srvAddr.sin_addr);
-    ret = connect(sd, (struct sockaddr *)&srvAddr, sizeof(srvAddr));
+    memset(&srv_addr, 0, sizeof(srv_addr));
+    srv_addr.sin_family = AF_INET;
+    srv_addr.sin_port = htons(server_port);
+    inet_pton(AF_INET, ip_server, &srv_addr.sin_addr);
+    ret = connect(sd, (struct sockaddr *)&srv_addr, sizeof(srv_addr));
 
     if (sd < 0 || ret < 0)
     {
@@ -32,25 +36,25 @@ int main(int argc, char **argv)
     std::unique_ptr<Session> session(new Session());
     session->socket = sd;
 
-    if (!receive_message0(session.get()))
+    if (!receive_message1(session.get()))
     {
         log_error("Error in receiving message 0");
         exit(1);
     }
 
-    if (!send_message1(session.get()))
+    if (!send_message2(session.get()))
     {
         log_error("Error in sending message 1");
         exit(1);
     }
 
-    if (!receive_message2(session.get()))
+    if (!receive_message3(session.get()))
     {
         log_error("Error in receiving message 2");
         exit(1);
     }
 
-    if (!send_message3(session.get()))
+    if (!send_message4(session.get()))
     {
         log_error("Error in sending message 3");
         exit(1);
@@ -61,7 +65,7 @@ int main(int argc, char **argv)
     // Delete the ephemeral keys
     EVP_PKEY_free(session->eph_key_pub);
     EVP_PKEY_free(session->eph_key_priv);
-
+    std::map<std::string, std::unique_ptr<CommandClient>> client_command_map;
     client_command_map["upload"].reset(new UploadClient());
     client_command_map["download"].reset(new DownloadClient());
     client_command_map["delete"].reset(new DeleteClient());

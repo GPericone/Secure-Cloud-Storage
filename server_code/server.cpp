@@ -1,4 +1,4 @@
-#include "server.h"
+#include "utils.h"
 
 // Queue of tasks
 std::queue<int> task_queue;
@@ -25,13 +25,13 @@ void handle_client(int newSd)
     std::unique_ptr<Session> session(new Session());
     session->socket = newSd;
 
-    if (send_message0(session.get()) == false)
+    if (send_message1(session.get()) == false)
     {
         log_error("Error in receiving message 0");
         return;
     }
 
-    if (receive_message1(session.get()) == false)
+    if (receive_message2(session.get()) == false)
     {
         log_error("Error in receiving message 1");
         return;
@@ -48,13 +48,13 @@ void handle_client(int newSd)
         return;
     }
 
-    if (send_message2(session.get(), server_private_key) == false)
+    if (send_message3(session.get(), server_private_key) == false)
     {
         log_error("Error in sending message 2");
         return;
     }
 
-    if (receive_message3(session.get()) == false)
+    if (receive_message4(session.get()) == false)
     {
         log_error("Error in receiving message 3");
         return;
@@ -62,25 +62,9 @@ void handle_client(int newSd)
 
     std::cout << "Handshake completed for client " << session->username << std::endl;
 
-    //se non esiste la cartella dell'utente la crea
-    std::string username_folder = "server_file/users/" + session->username;
-    if (int result = mkdir(username_folder.c_str(), 0777); result == 0)
-    {
-        std::cout << "Cartella creata: " << username_folder.c_str() << std::endl;
-    }
-    else if (errno == EEXIST)
-    {
-        std::cout << "La cartella esiste già: " << username_folder.c_str() << std::endl;
-    }
-    else
-    {
-        std::cout << "Errore durante la creazione della cartella: " << username_folder.c_str() << result << errno << std::endl;
-        return;
-    }
-
     // Delete the ephemeral key
     EVP_PKEY_free(session->eph_key_pub);
-
+    std::map<std::string, std::unique_ptr<CommandServer>> server_command_map;
     server_command_map["upload"].reset(new UploadServer());
     server_command_map["download"].reset(new DownloadServer());
     server_command_map["delete"].reset(new DeleteServer());
@@ -113,7 +97,6 @@ void handle_client(int newSd)
             printf("Comando non riconosciuto\n");
             break;
         }
-    
     }
     session.reset();
     // Close the connection with the client
@@ -152,6 +135,9 @@ void thread_func()
 
 int main(int argc, char **argv)
 {
+    struct sockaddr_in myAddr, clAddr;
+    socklen_t len;
+    int port, sd, ret, newSd;
     if (argc == 1)
     {
         port = 4242;

@@ -34,20 +34,12 @@
 #include <sys/stat.h>
 #include <regex>
 
-using namespace std;
-
-// #define USERNAMESIZE 25
-// #define NONCE_LEN 16
-
 const int CHUNK_SIZE = 1000000;
-
-const int MAX_BUF_SIZE = 65536;
 const size_t MAX_PATH = 512;
 const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
 const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
-const size_t USERNAMESIZE = 25;
-const std::string F_NAME = "users.csv";
+const std::string USERNAMES_FILE = "users.csv";
 const std::regex pattern("[A-Za-z0-9_. -]+");
 
 // SESSION STRUCT
@@ -61,94 +53,8 @@ struct Session
     EVP_PKEY *eph_key_priv;
     EVP_PKEY *eph_key_pub;
     int socket;
-    int counter = 0;
-    // TODO: Aggiungere i counter per le funzioni
-};
-
-// NONCE LIST
-class NonceList
-{
-private:
-    std::list<unsigned char *> nonce_list;
-
-    // Compare two nonces
-    static bool compare_nonces(const unsigned char *a, const unsigned char *b)
-    {
-        return std::strcmp(reinterpret_cast<const char *>(a), reinterpret_cast<const char *>(b)) == 0;
-    }
-
-public:
-    // Insert a nonce into the list
-    void insert(const unsigned char *nonce)
-    {
-        unsigned char *nonce_copy = new unsigned char[std::strlen(reinterpret_cast<const char *>(nonce)) + 1];
-        std::strcpy(reinterpret_cast<char *>(nonce_copy), reinterpret_cast<const char *>(nonce));
-        nonce_list.push_back(nonce_copy);
-    }
-
-    // Check if a nonce is in the list
-    bool contains(const unsigned char *nonce) const
-    {
-        for (const unsigned char *stored_nonce : nonce_list)
-        {
-            if (compare_nonces(stored_nonce, nonce))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    ~NonceList()
-    {
-        for (unsigned char *nonce : nonce_list)
-        {
-            delete[] nonce;
-        }
-    }
-};
-
-class CommandClient
-{
-public:
-    virtual ~CommandClient() = default;
-    virtual bool execute(Session *session, const std::string command) = 0;
-};
-
-class UploadClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
-};
-
-class DownloadClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
-};
-
-class DeleteClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
-};
-
-class ListClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
-};
-
-class RenameClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
-};
-
-class LogoutClient : public CommandClient
-{
-public:
-    bool execute(Session *session, const std::string command) override;
+    int client_counter;
+    int server_counter;
 };
 
 bool send_message(Session *client_session, const std::string payload);
@@ -201,14 +107,10 @@ public:
 bool isRegistered(std::string_view username);
 
 // MANAGE MESSAGES
-bool send_message0(Session *server_session);
-bool receive_message0(Session *client_session);
-bool send_message1(Session *client_session);
-bool receive_message1(Session *server_session);
-bool send_message2(Session *server_session, EVP_PKEY *server_private_key);
-bool receive_message2(Session *client_session);
-bool send_message3(Session *client_session);
-bool receive_message3(Session *server_session);
+bool send_message1(Session *server_session);
+bool receive_message2(Session *server_session);
+bool send_message3(Session *server_session, EVP_PKEY *server_private_key);
+bool receive_message4(Session *server_session);
 
 // MEMORY HANDLER
 
@@ -235,15 +137,11 @@ void log_error(const std::string &msg);
 // CERTIFICATES
 
 int load_certificate(std::string filename, X509 **certificate);
-int load_crl(std::string filename, X509_CRL **crl);
-int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl);
-int verify_certificate(X509_STORE *store, X509 *certificate);
 
 // ASYMMETRIC KEYS
 
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
-bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub);
 int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key);
 EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len);
 
@@ -268,25 +166,6 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
                    unsigned char *iv, int iv_len,
                    unsigned char *plaintext);
 
-// DIGITAL ENVELOPE
-
-int envelope_encrypt(EVP_PKEY *public_key,
-                     unsigned char *plaintext,
-                     int pt_len,
-                     unsigned char *sym_key_enc,
-                     int sym_key_len,
-                     unsigned char *iv,
-                     unsigned char *ciphertext);
-
-int envelope_decrypt(EVP_PKEY *private_key,
-                     unsigned char *ciphertext,
-                     int ct_len,
-                     unsigned char *sym_key_enc,
-                     int sym_key_len,
-                     unsigned char *iv,
-                     unsigned char *plaintext);
-
 bool rsaEncrypt(const unsigned char* plaintext, size_t plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, size_t& ciphertextLength);
-bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, size_t &plaintextLength);
 
 #endif
