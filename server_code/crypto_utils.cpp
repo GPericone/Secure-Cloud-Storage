@@ -23,6 +23,7 @@ int load_certificate(std::string filename, X509 **certificate)
     if (!certificate)
     {
         std::cerr << "An error occurred while reading the certificate" << std::endl;
+        fclose(fp);
         return -1;
     }
     fclose(fp);

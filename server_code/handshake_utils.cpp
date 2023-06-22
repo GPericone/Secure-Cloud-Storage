@@ -160,6 +160,7 @@ bool receive_message2(Session *server_session)
     }
 
     // Load the client public key in order to verify the signature
+    //TODO: convertire abs_path in stringa
     char abs_path[MAX_PATH];
     getcwd(abs_path, MAX_PATH);
     std::string path = std::string(abs_path) + "/server_file/public_keys/" + username_str + "_public_key.pem";
@@ -379,7 +380,7 @@ bool receive_message4(Session *server_session)
     if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
     {
         log_error("Error receiving tag");
-        delete_buffers(ciphertext, plaintext, tag);
+        delete_buffers(ciphertext, plaintext, tag, aad);
         return false;
     }
 
@@ -390,7 +391,7 @@ bool receive_message4(Session *server_session)
     if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
     {
         log_error("Error receiving IV");
-        delete_buffers(ciphertext, plaintext, tag, iv);
+        delete_buffers(ciphertext, plaintext, tag, iv, aad);
         return false;
     }
 

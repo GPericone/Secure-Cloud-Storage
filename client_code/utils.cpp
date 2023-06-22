@@ -45,7 +45,7 @@ bool deserializeNumber(const unsigned char *buffer, long int *result)
 
     *result = 0;
 
-    for (int i = 0; i < sizeof(long int); i++)
+    for (long unsigned int i = 0; i < sizeof(long int); i++)
     {
         if (buffer[i] == '\0')
         {

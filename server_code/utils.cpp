@@ -45,7 +45,7 @@ bool deserializeNumber(const unsigned char *buffer, long int *result)
 
     *result = 0;
 
-    for (int i = 0; i < sizeof(long int); i++)
+    for (long unsigned int i = 0; i < sizeof(long int); i++)
     {
         if (buffer[i] == '\0')
         {
@@ -376,7 +376,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *plaintext = new unsigned char[message_len];
 
     // Read the counter from the socket
-    int counter;
+    unsigned int counter;
     unsigned char *counter_byte = new unsigned char[sizeof(int)];
     if ((recv_all(session->socket, (void *)counter_byte, sizeof(int))) != sizeof(int))
     {
@@ -496,7 +496,7 @@ bool UploadServer::execute(Session *session, std::string command)
     // check che il file non sia più grande di 4GB
     std::string esito_string = "";
     int valido = 1;
-    if (std::stoi(file_size) > UINT32_MAX)
+    if (std::stoul(file_size) > UINT32_MAX)
     {
         esito_string = "Dimensione file maggiore di 4GB, riprova\n";
         valido = 0;

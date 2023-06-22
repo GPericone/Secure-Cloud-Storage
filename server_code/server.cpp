@@ -137,13 +137,8 @@ int main(int argc, char **argv)
 {
     struct sockaddr_in myAddr, clAddr;
     socklen_t len;
-    int port, sd, ret, newSd;
-    if (argc == 1)
-    {
-        port = 4242;
-    }
-    else
-        port = atoi(argv[1]);
+    int sd, ret, newSd;
+    unsigned short int port = 4242;
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
     std::cout << "Socket created correctly" << std::endl;

@@ -4,17 +4,12 @@ int main(int argc, char **argv)
 {
     struct sockaddr_in srv_addr;
     const char *ip_server = "127.0.0.1";
-    int server_port = 4242;
+    unsigned short int server_port = 4242;
     int sd, ret;
 
     if (argc != 1)
     {
         ip_server = argv[1];
-        server_port = atoi(argv[2]);
-    }
-    else
-    {
-        server_port = 4242;
     }
 
     // Create socket

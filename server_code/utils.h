@@ -53,8 +53,8 @@ struct Session
     EVP_PKEY *eph_key_priv;
     EVP_PKEY *eph_key_pub;
     int socket;
-    int client_counter;
-    int server_counter;
+    unsigned int client_counter;
+    unsigned int server_counter;
 };
 
 bool send_message(Session *client_session, const std::string payload);
