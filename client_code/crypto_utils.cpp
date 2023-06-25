@@ -4,122 +4,95 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
-/**
- * @brief Loads a certificate from the specified PEM file.
- *
- * @param filename the name of the file containing the certificate
- * @param certificate pointer to the certificate object to be loaded
- * @return int 0 if successful, -1 otherwise
- */
-int load_certificate(std::string filename, X509 **certificate)
+bool load_certificate(std::string filename, X509 **certificate)
 {
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
-        return -1;
+        return false;
     }
-    *certificate = PEM_read_X509(fp, NULL, NULL, NULL);
+    *certificate = PEM_read_X509(fp, nullptr, nullptr, nullptr);
     if (!certificate)
     {
         std::cerr << "An error occurred while reading the certificate" << std::endl;
-        return -1;
+        fclose(fp);
+        return false;
     }
     fclose(fp);
-    return 0;
+    return true;
 }
 
-/**
- * @brief Loads a CRL from the specified PEM file.
- *
- * @param filename the name of the file containing the CRL
- * @param crl pointer to the CRL object to be loaded
- * @return int 0 if successful, -1 otherwise
- */
-int load_crl(std::string filename, X509_CRL **crl)
+bool load_crl(std::string filename, X509_CRL **crl)
 {
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
         std::cerr << "An error occurred while opening the file" << std::endl;
-        return -1;
+        return false;
     }
-    *crl = PEM_read_X509_CRL(fp, NULL, NULL, NULL);
+    *crl = PEM_read_X509_CRL(fp, nullptr, nullptr, nullptr);
     if (!crl)
     {
         std::cerr << "An error occurred while reading the CRL" << std::endl;
-        return -1;
+        fclose(fp);
+        return false;
     }
     fclose(fp);
-    return 0;
+    return true;
 }
 
-/**
- * @brief Create a store object and add the CA certificate and CRL to it.
- *
- * @param store pointer to the store object to be created
- * @param CA_certificate pointer to the CA certificate
- * @param crl pointer to the CRL
- * @return int 0 if successful, -1 otherwise
- */
-int create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
+bool create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
     // Allocate an empty store, returning NULL if an error occurred
     *store = X509_STORE_new();
-    if (store == NULL)
+    if (store == nullptr)
     {
         std::cerr << "An error occurred during the creation of the store" << std::endl;
-        return -1;
+        return false;
     }
 
     // Add the CA certificate to the store
     if (X509_STORE_add_cert(*store, CA_certificate) != 1)
     {
         std::cerr << "An error occurred during the addition of certificate" << std::endl;
-        return -1;
+        return false;
     }
 
     // Add the CRL to the store
     if (X509_STORE_add_crl(*store, crl) != 1)
     {
         std::cerr << "An error occurred during the addition of CRL" << std::endl;
-        return -1;
+        return false;
     }
 
     // Configure the store to perform CRL checking for every valid certificate before returning the result
     if (X509_STORE_set_flags(*store, X509_V_FLAG_CRL_CHECK) != 1)
     {
         std::cerr << "An error occurred while configuring the store flags" << std::endl;
-        return -1;
+        return false;
     }
 
-    return 0;
+    return true;
 }
 
-/**
- * @brief Verify the validity of a certificate using the provided store.
- *
- * @param store pointer to the store object
- * @param certificate pointer to the certificate to be verified
- * @return int 0 if successful, -1 otherwise
- */
-int verify_certificate(X509_STORE *store, X509 *certificate)
+bool verify_certificate(X509_STORE *store, X509 *certificate)
 {
     // Allocate a new context for certificate verification, returns the allocated context or NULL if an error occurs
     X509_STORE_CTX *certificate_ctx = X509_STORE_CTX_new();
-    if (certificate_ctx == NULL)
+    if (certificate_ctx == nullptr)
     {
         std::cerr << "An error occurred during the creation of the store context" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
-        return -1;
+        return false;
     }
 
     // Initialize the context for certificate verification.
-    if (X509_STORE_CTX_init(certificate_ctx, store, certificate, NULL) != 1)
+    if (X509_STORE_CTX_init(certificate_ctx, store, certificate, nullptr) != 1)
     {
         std::cerr << "An error occurred during initialization of the store context" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
-        return -1;
+        return false;
     }
 
     // Verify the certificate.
@@ -128,29 +101,23 @@ int verify_certificate(X509_STORE *store, X509 *certificate)
     {
         std::cerr << "An error occurred during the verification of the certificate" << std::endl;
         X509_STORE_CTX_free(certificate_ctx);
-        return -1;
+        return false;
     }
     else if (verification_result == 0)
     {
         X509_STORE_CTX_free(certificate_ctx);
         std::cerr << "The certificate cannot be verified" << std::endl;
-        return -1;
+        return false;
     }
 
     X509_STORE_CTX_free(certificate_ctx);
-    return 0;
+    return true;
 }
 
 // --------------------------------------------------------------------------
 // ASYMMETRIC KEYS
 // --------------------------------------------------------------------------
 
-/**
- * @brief Load a private key from the specified private key file.
- *
- * @param private_key_file the name of the file containing the private key
- * @return EVP_PKEY* pointer to the private key object
- */
 EVP_PKEY *load_private_key(const char *private_key_file)
 {
     // Open the file
@@ -162,7 +129,7 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     }
 
     // Read the private key from the file
-    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void *)"password");
+    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, nullptr);
 
     if (!private_key)
     {
@@ -177,13 +144,6 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     return private_key;
 }
 
-/**
- * @brief Generate an ephemeral key pair.
- *
- * @param k_priv the private key to be generated
- * @param k_pub the public key to be generated
- * @return true on success, false otherwise
- */
 bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
 {
     // Inialize the variables
@@ -278,17 +238,6 @@ bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
     return true;
 }
 
-/**
- * @brief Serializes a public key to a byte array.
- *
- * This function serializes a public key to a byte array.
- * The byte array is allocated inside the function, and a pointer to it is returned.
- *
- * @param public_key      Pointer to an EVP_PKEY structure containing the public key.
- * @param serialized_key  Pointer to a pointer to an unsigned char array that will contain the serialized key.
- *
- * @return                The size of the serialized key, or -1 in case of errors.
- */
 int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 {
     BIO *bio = BIO_new(BIO_s_mem());
@@ -323,21 +272,8 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 // --------------------------------------------------------------------------
 // DIGITAL SIGNATURE
 // --------------------------------------------------------------------------
-/**
- * @brief Creates a digital signature for the given data using the provided private key.
- *
- * This function creates a digital signature for the given data using the SHA-256
- * digest algorithm and the provided private key. The signature is generated using
- * the EVP_Sign* family of functions from the OpenSSL library.
- *
- * @param private_key Pointer to an EVP_PKEY structure containing the private key used for signing.
- * @param data        Pointer to the unsigned char array containing the data to be signed.
- * @param data_len    Integer representing the length of the data in bytes.
- * @param signature   Pointer to the unsigned char array where the generated signature will be stored.
- *
- * @return            Integer representing the length of the generated signature in bytes, or -1 in case of errors.
- */
-int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, int data_len, unsigned char *signature)
+
+int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, size_t data_len, unsigned char *signature)
 {
     const EVP_MD *digest = EVP_sha256();
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
@@ -378,21 +314,7 @@ int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, i
     return signature_len;
 }
 
-/**
- * @brief Verifies a digital signature using a public key.
- *
- * This function verifies a digital signature using a given public key, signature, and data.
- * The function computes the SHA-256 hash of the data and checks if the signature matches the hash.
- *
- * @param public_key      Pointer to the EVP_PKEY structure containing the public key.
- * @param signature       Pointer to an unsigned char array containing the signature.
- * @param signature_len   Length of the signature array.
- * @param data            Pointer to an unsigned char array containing the data to verify.
- * @param data_len        Length of the data array.
- *
- * @return                Returns 1 if the signature is successfully verified, -1 in case of errors.
- */
-int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signature, int signature_len, const unsigned char *data, int data_len)
+int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signature, unsigned int signature_len, const unsigned char *data, size_t data_len)
 {
     const EVP_MD *digest = EVP_sha256();
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
@@ -423,7 +345,7 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     ret = EVP_VerifyFinal(ctx, signature, signature_len, public_key);
     if (ret != 1)
     {
-        std::cerr << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        std::cerr << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -440,25 +362,11 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 // The cipher to be used for encryption and decryption
 const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
-/**
- * Encrypts the plaintext using the AES-GCM encryption algorithm and returns the ciphertext and tag.
- *
- * @param plaintext The plaintext to be encrypted.
- * @param plaintext_len The length of the plaintext.
- * @param aad The additional authentication data (AAD) to be included in the encryption.
- * @param aad_len The length of the AAD.
- * @param key The encryption key.
- * @param iv The initialization vector (IV).
- * @param iv_len The length of the IV.
- * @param ciphertext The buffer where the ciphertext will be written.
- * @param tag The buffer where the authentication tag will be written.
- * @return The length of the ciphertext on success, or -1 on error.
- */
-int aesgcm_encrypt(unsigned char *plaintext,
+int aesgcm_encrypt(const unsigned char *plaintext,
                    int plaintext_len,
-                   unsigned char *aad, int aad_len,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+                   const unsigned char *aad, int aad_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *ciphertext,
                    unsigned char *tag)
 {
@@ -470,7 +378,7 @@ int aesgcm_encrypt(unsigned char *plaintext,
     // Create and initialise the context
     ctx = EVP_CIPHER_CTX_new();
 
-    if (ctx == NULL)
+    if (ctx == nullptr)
     {
         std::cerr << "An error occurred during the creation of the context" << std::endl;
         return -1;
@@ -484,7 +392,7 @@ int aesgcm_encrypt(unsigned char *plaintext,
     }
 
     // Provide any AAD data. This can be called zero or more times as required
-    if (1 != EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len))
+    if (1 != EVP_EncryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
         std::cerr << "An error occurred during the provision of AAD data" << std::endl;
         return -1;
@@ -518,30 +426,12 @@ int aesgcm_encrypt(unsigned char *plaintext,
 
     return ciphertext_len;
 }
-/**
- * @brief Decrypts an AES-GCM ciphertext and verifies its authenticity.
- *
- * This function decrypts an AES-GCM encrypted ciphertext using the provided key, IV, and
- * authentication tag. It also processes additional authenticated data (AAD) if provided.
- * The function uses the EVP_Decrypt* family of functions from the OpenSSL library for decryption.
- *
- * @param ciphertext    Pointer to the unsigned char array containing the ciphertext to be decrypted.
- * @param ciphertext_len Integer representing the length of the ciphertext in bytes.
- * @param aad           Pointer to the unsigned char array containing the additional authenticated data (AAD).
- * @param aad_len       Integer representing the length of the AAD in bytes.
- * @param tag           Pointer to the unsigned char array containing the authentication tag.
- * @param key           Pointer to the unsigned char array containing the decryption key.
- * @param iv            Pointer to the unsigned char array containing the initialization vector (IV).
- * @param iv_len        Integer representing the length of the IV in bytes.
- * @param plaintext     Pointer to the unsigned char array where the decrypted plaintext will be stored.
- *
- * @return              Integer representing the length of the decrypted plaintext in bytes, or -1 in case of errors or authentication failure.
- */
-int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
-                   unsigned char *aad, int aad_len,
+
+int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
+                   const unsigned char *aad, int aad_len,
                    unsigned char *tag,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *plaintext)
 {
     EVP_CIPHER_CTX *ctx;
@@ -552,7 +442,7 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     /* Create and initialise the context */
     ctx = EVP_CIPHER_CTX_new();
 
-    if (ctx == NULL)
+    if (ctx == nullptr)
     {
         std::cerr << "An error occurred during the creation of the context" << std::endl;
         return -1;
@@ -565,7 +455,7 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     }
 
     // Provide any AAD data.
-    if (!EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len))
+    if (!EVP_DecryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
         std::cerr << "An error occurred during the provision of AAD data" << std::endl;
         return -1;
@@ -608,7 +498,7 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     }
 }
 
-bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, size_t &plaintextLength)
+bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, int &plaintextLength)
 {
     RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
     if (!rsaKey)
@@ -617,22 +507,32 @@ bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PK
         return false;
     }
 
-    int rsaKeySize = RSA_size(rsaKey);
-    plaintext = new unsigned char[rsaKeySize];
+    plaintext = new unsigned char[RSA_size(rsaKey)];
 
-    int result = RSA_private_decrypt(ciphertextLength, ciphertext, plaintext, rsaKey, RSA_PKCS1_PADDING);
-    if (result == -1)
+    plaintextLength = RSA_private_decrypt(size_t_to_int(ciphertextLength), ciphertext, plaintext, rsaKey, RSA_PKCS1_OAEP_PADDING);
+    if (plaintextLength == -1)
     {
         std::cerr << "Error decrypting with RSA." << std::endl;
         ERR_print_errors_fp(stderr);
         RSA_free(rsaKey);
-        delete[] plaintext;
         return false;
     }
-
-    plaintextLength = result;
 
     RSA_free(rsaKey);
 
     return true;
+}
+
+EVP_PKEY *duplicate_key(EVP_PKEY *pkey, bool is_private)
+{
+    EVP_PKEY *pDupKey = EVP_PKEY_new();
+    RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
+    RSA *pRSADupKey;
+
+    pRSADupKey = (is_private==true) ? RSAPrivateKey_dup(pRSA) : RSAPublicKey_dup(pRSA);
+
+    RSA_free(pRSA);
+    EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
+    RSA_free(pRSADupKey);
+    return pDupKey;
 }

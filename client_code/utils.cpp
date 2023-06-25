@@ -5,24 +5,20 @@ void log_error(const std::string &msg)
     std::cerr << "Error: " << msg << std::endl;
 }
 
-/**
- * @brief The function serializes an integer and stores it in the provided buffer as unsigned char buffer.
- *
- * @param input the integer to be serialized
- * @param output the buffer where the serialized integer should be stored
- */
+int longint_to_int(long int value) {
+    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+        std::cerr << "Errore: overflow durante la conversione in int!" << std::endl;
+        exit(1);
+    }
+    
+    return static_cast<int>(value);
+}
+
 void serialize_int(int input, unsigned char *output)
 {
     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
     std::copy(p, p + sizeof(int), output);
 }
-
-/**
- * @brief The function serializes a long integer and stores it in the provided buffer as unsigned char buffer.
- *
- * @param input the long integer to be serialized
- * @param output the buffer where the serialized long integer should be stored
- */
 
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size)
 {
@@ -36,7 +32,7 @@ void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size
     }
 }
 
-bool deserializeNumber(const unsigned char *buffer, long int *result)
+bool deserialize_longint(const unsigned char *buffer, long int *result)
 {
     if (buffer == nullptr || result == nullptr)
     {
@@ -57,20 +53,7 @@ bool deserializeNumber(const unsigned char *buffer, long int *result)
     return true;
 }
 
-/**
- * @brief Receive a specified number of bytes from a socket.
- *
- * This function receives data from the specified socket and stores it in the provided buffer.
- * It will continue to receive data until the specified number of bytes have been received or an
- * error occurs. In case of an error or if the connection is closed before receiving all the
- * requested bytes, the function returns the number of bytes received so far or -1 if an error occurred.
- *
- * @param socket The socket file descriptor from which data should be received.
- * @param buffer A pointer to the buffer where the received data should be stored.
- * @param len The number of bytes to receive.
- * @return The number of bytes actually received or -1 if an error occurred.
- */
-int recv_all(int socket, void *buffer, ssize_t len)
+bool recv_all(int socket, void *buffer, ssize_t len)
 {
     ssize_t bytes_left = len;                       // The number of bytes remaining to be received
     ssize_t bytes_read;                             // The number of bytes read in the current iteration
@@ -84,7 +67,7 @@ int recv_all(int socket, void *buffer, ssize_t len)
         if (bytes_read < 0)
         {
             log_error("Failed to receive data from the socket");
-            return -1;
+            return false;
         }
 
         if (bytes_read == 0)
@@ -95,17 +78,10 @@ int recv_all(int socket, void *buffer, ssize_t len)
         bytes_left -= bytes_read;
         buffer_ptr += bytes_read;
     }
-    return len - bytes_left;
+    return ((len - bytes_left) == len);
 }
 
-/**
- * @brief convert a size_t value to an int value in a safe way
- *
- * @param value the size_t value to convert
- *
- * @return int the converted value
- */
-int safe_size_t_to_int(size_t value)
+int size_t_to_int(size_t value)
 {
     if (value > static_cast<size_t>(std::numeric_limits<int>::max()))
     {
@@ -115,31 +91,31 @@ int safe_size_t_to_int(size_t value)
     return static_cast<int>(value);
 }
 
-/**
- * @brief a variadic function that deletes a list of buffers
- *
- * @tparam T the type of the buffers
- * @param buffer the first buffer to delete
- */
 template <typename T>
 void deleteBuffers(T *buffer)
 {
     delete[] buffer;
 }
 
-/**
- * @brief a variadic function that deletes a list of buffers
- *
- * @tparam T the type of the buffers
- * @tparam Ts the types of the buffers
- * @param buffer the first buffer to delete
- * @param buffers the other buffers to delete
- */
 template <typename T, typename... Ts>
 void deleteBuffers(T *buffer, Ts *...buffers)
 {
     delete[] buffer;
     deleteBuffers(buffers...);
+}
+
+double get_double_file_size(std::string const &path)
+{
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+    {
+        return 0.0;
+    }
+
+    std::streampos fileSize = file.tellg();
+    file.close();
+
+    return static_cast<double>(fileSize);
 }
 
 bool send_file(Session *session, std::string const &file_path)
@@ -155,8 +131,7 @@ bool send_file(Session *session, std::string const &file_path)
 
     // Leggi il file a blocchi di 1 MB alla volta e invia ogni blocco
     std::string buffer;
-    // int file_size = get_file_size_no_ext(file_path);
-    auto file_size = (double)std::filesystem::file_size(file_path);
+    auto file_size = get_double_file_size(file_path);
     int num_sends = static_cast<int>((file_size + CHUNK_SIZE - 1) / CHUNK_SIZE);
     for (int i = 0; i < num_sends; ++i)
     {
@@ -168,11 +143,13 @@ bool send_file(Session *session, std::string const &file_path)
             esito = 0;
         }
         buffer.resize(bytes_to_read);
-        input_file.read(buffer.data(), bytes_to_read);
-        if (!send_message(session, buffer, true, esito)) // inviare il flag finale solo per l'ultimo chunk
+        input_file.read(&buffer[0], bytes_to_read);
+        printf("buffer=%s\n", buffer.c_str());
+        std::copy(buffer.begin(), buffer.end(), buffer.data());
+
+        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, esito)) // inviare il flag finale solo per l'ultimo chunk
         {
             std::cerr << "Errore durante l'invio del file " << file_path << std::endl;
-            buffer.clear();
             input_file.close();
             return false;
         }
@@ -182,7 +159,7 @@ bool send_file(Session *session, std::string const &file_path)
 
     input_file.close();
 
-    int esito;
+    unsigned int esito;
     std::string response;
     if (!receive_message(session, &response, true, &esito))
     {
@@ -201,18 +178,9 @@ bool send_file(Session *session, std::string const &file_path)
     }
 }
 
-std::string get_file_size_no_ext(std::string const &path)
+std::string get_file_size_no_ext(const std::string &path)
 {
-    if (std::filesystem::is_directory(path))
-    {
-        return "";
-    }
-    int i{};
-    auto mantissa = (double)std::filesystem::file_size(path);
-    for (; mantissa >= 1024.; mantissa /= 1024., ++i)
-    {
-        // stiamo solo cercando la mantissa, nessuna operazione richiesta;
-    }
+    auto mantissa = get_double_file_size(path);
     std::stringstream stream;
     stream << std::fixed << std::setprecision(2) << mantissa;
     return stream.str();
@@ -220,16 +188,13 @@ std::string get_file_size_no_ext(std::string const &path)
 
 std::string get_file_size(std::string const &path)
 {
-    if (std::filesystem::is_directory(path))
+    auto mantissa = get_double_file_size(path);
+    int i = 0;
+    for (; mantissa >= 1024.0; mantissa /= 1024.0, ++i)
     {
-        return "";
+        // Stiamo solo cercando la mantissa, nessuna operazione richiesta
     }
-    int i{};
-    auto mantissa = (double)std::filesystem::file_size(path);
-    for (; mantissa >= 1024.; mantissa /= 1024., ++i)
-    {
-        // stiamo solo cercando la mantissa, nessuna operazione richiesta;
-    }
+
     std::stringstream stream;
     stream << std::fixed << std::setprecision(2) << mantissa;
     return stream.str() + " " + "BKMGTPE"[i] + std::string((i == 0) ? "yte" : "B");
@@ -240,7 +205,7 @@ bool send_message(Session *session, const std::string payload)
     return send_message(session, payload, false, 0);
 }
 
-bool send_message(Session *session, const std::string payload, bool send_esito, int esito)
+bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito)
 {
     int aad_len = sizeof(int) + ((send_esito) ? sizeof(int) : 0);
     unsigned char *plaintext = new unsigned char[payload.size()];
@@ -268,15 +233,15 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     memcpy(plaintext, payload.c_str(), payload.size());
 
     // Generate a random IV
-    if (!RAND_bytes(iv, safe_size_t_to_int(IV_LEN)))
+    if (!RAND_bytes(iv, IV_LEN))
     {
         log_error("Error generating IV");
-        delete_buffers(plaintext, aad, iv, tag, command_len_byte, counter_byte);
+        delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte);
         return false;
     }
 
     // Encrypt the message using AES-GCM
-    int ciphertext_len = aesgcm_encrypt(plaintext, safe_size_t_to_int(payload.size()), aad, aad_len, session->aes_key, iv, safe_size_t_to_int(IV_LEN), ciphertext, tag);
+    int ciphertext_len = aesgcm_encrypt(plaintext, size_t_to_int(payload.size()), aad, aad_len, session->aes_key, iv, ciphertext, tag);
     if (ciphertext_len < 0)
     {
         log_error("Error encrypting message");
@@ -312,34 +277,28 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
 
 bool check_availability_to_upload(std::string const &path, std::string *response)
 {
-    if (std::filesystem::is_directory(path))
+
+    // Check file size
+    std::ifstream input_file(path, std::ios::binary);
+    // check file existance
+    if (!input_file.is_open())
     {
-        *response = "Il file è una directory";
+        *response = "Errore: impossibile aprire il file " + path + ".";
         return false;
     }
-    else if (!std::filesystem::exists(path))
+    input_file.seekg(0, std::ios::end);
+    std::streampos file_size = input_file.tellg();
+    input_file.seekg(0, std::ios::beg);
+    if (file_size > UINT32_MAX)
     {
-        *response = "Il file non esiste";
-        return false;
-    }
-    else
-    {
-        // Check file size
-        std::ifstream input_file(path, std::ios::binary);
-        input_file.seekg(0, std::ios::end);
-        std::streampos file_size = input_file.tellg();
-        input_file.seekg(0, std::ios::beg);
-        if (file_size > UINT32_MAX)
-        {
-            *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
-            input_file.close();
-            return false;
-        }
-        // response prende la dimensione del file
+        *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
         input_file.close();
-        *response = get_file_size_no_ext(path);
-        return true;
+        return false;
     }
+    // response prende la dimensione del file
+    input_file.close();
+    *response = get_file_size_no_ext(path);
+    return true;
 }
 
 bool UploadClient::execute(Session *session, std::string command)
@@ -355,11 +314,6 @@ bool UploadClient::execute(Session *session, std::string command)
     if (tokens.size() != 2)
     {
         printf("Il comando richiede 1 parametro, nome del file da caricare, riprova\n");
-        if (!send_message(session, "Il comando richiede 1 parametro, nome del file da caricare, riprova\n"))
-        {
-            log_error("Error sending message");
-            return false;
-        }
         return true;
     }
 
@@ -378,7 +332,7 @@ bool UploadClient::execute(Session *session, std::string command)
     if (check_file)
     {
         std::string response;
-        int success;
+        unsigned int success;
         if (!receive_message(session, &response, true, &success))
         {
             log_error("Error receiving message");
@@ -388,7 +342,8 @@ bool UploadClient::execute(Session *session, std::string command)
         if (success == 1)
         {
             // TODO: divido il file in chunk di 1 MB e li invio
-            if (!send_file(session, file_to_upload.c_str())) {
+            if (!send_file(session, file_to_upload.c_str()))
+            {
                 log_error("Error sending file");
                 return false;
             }
@@ -415,16 +370,11 @@ bool DownloadClient::execute(Session *session, std::string command)
     if (tokens.size() != 2)
     {
         printf("Il comando richiede 1 parametro, nome del file da scaricare, riprova\n");
-        if (!send_message(session, "Il comando richiede 1 parametro, nome del file da scaricare, riprova\n"))
-        {
-            log_error("Error sending message");
-            return false;
-        }
         return true;
     }
 
     std::string response_existance;
-    int exists;
+    unsigned int exists;
     if (!receive_message(session, &response_existance, true, &exists))
     {
         log_error("Error receiving message");
@@ -459,7 +409,7 @@ bool DownloadClient::execute(Session *session, std::string command)
         while (!is_last)
         {
             std::string buffer;
-            int esito_receive;
+            unsigned int esito_receive;
             if (!receive_message(session, &buffer, true, &esito_receive))
             {
                 std::cerr << "Errore durante la ricezione del file " << file_to_download << std::endl;
@@ -490,7 +440,7 @@ bool DownloadClient::execute(Session *session, std::string command)
 bool DeleteClient::execute(Session *session, std::string command)
 {
     std::string response_existance;
-    int exists;
+    unsigned int exists;
     if (!receive_message(session, &response_existance, true, &exists))
     {
         log_error("Error receiving message");
@@ -564,18 +514,18 @@ bool receive_message(Session *session, std::string *payload)
     return receive_message(session, payload, false, nullptr);
 }
 
-bool receive_message(Session *session, std::string *payload, bool receive_esito, int *esito)
+bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
 {
     // Read the payload length from the socket
     long int message_len;
     unsigned char *message_len_byte = new unsigned char[sizeof(long int)];
-    if ((recv_all(session->socket, (void *)message_len_byte, sizeof(long int))) != sizeof(long int))
+    if (!recv_all(session->socket, (void *)message_len_byte, sizeof(long int)))
     {
         log_error("Failed to read payload length");
         delete_buffers(message_len_byte);
         return false;
     }
-    deserializeNumber(message_len_byte, &message_len);
+    deserialize_longint(message_len_byte, &message_len);
     printf("Message length: %ld\n", message_len);
 
     // Allocate buffers for the ciphertext and plaintext
@@ -583,9 +533,9 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *plaintext = new unsigned char[message_len];
 
     // Read the counter from the socket
-    int counter;
+    unsigned int counter;
     unsigned char *counter_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(session->socket, (void *)counter_byte, sizeof(int))) != sizeof(int))
+    if (!recv_all(session->socket, (void *)counter_byte, sizeof(int)))
     {
         log_error("Failed to read counter");
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
@@ -593,7 +543,6 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     }
     memcpy(&counter, counter_byte, sizeof(int));
 
-    // TODO : aggiungere due counter, sistemare controllo
     if (counter != session->server_counter)
     {
         log_error("Counter mismatch");
@@ -606,7 +555,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *esito_byte = new unsigned char[sizeof(int)];
     if (receive_esito)
     {
-        if ((recv_all(session->socket, (void *)esito_byte, sizeof(int))) != sizeof(int))
+        if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
         {
             log_error("Failed to read esito");
             delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
@@ -615,7 +564,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
         memcpy(esito, esito_byte, sizeof(int));
     }
 
-    int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
+    unsigned int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
     unsigned char *aad = new unsigned char[aad_len];
     memcpy(aad, counter_byte, sizeof(int));
     if (receive_esito)
@@ -627,7 +576,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *tag = new unsigned char[TAG_LEN];
 
     // Receive the ciphertext
-    if (recv_all(session->socket, (void *)ciphertext, message_len) != message_len)
+    if (!recv_all(session->socket, (void *)ciphertext, message_len))
     {
         log_error("Error receiving ciphertext");
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
@@ -635,7 +584,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     }
 
     // Receive the tag
-    if (recv_all(session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
+    if (!recv_all(session->socket, (void *)tag, TAG_LEN))
     {
         log_error("Error receiving tag");
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
@@ -646,7 +595,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *iv = new unsigned char[IV_LEN];
 
     // Receive the IV
-    if (recv_all(session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
+    if (!recv_all(session->socket, (void *)iv, IV_LEN))
     {
         log_error("Error receiving IV");
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
@@ -654,7 +603,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     }
 
     // Decrypt the message
-    int plaintext_len = aesgcm_decrypt(ciphertext, message_len, aad, aad_len, tag, session->aes_key, iv, safe_size_t_to_int(IV_LEN), plaintext);
+    int plaintext_len = aesgcm_decrypt(ciphertext, longint_to_int(message_len), aad, aad_len, tag, session->aes_key, iv, plaintext);
     if (plaintext_len < 0)
     {
         log_error("Error decrypting message");

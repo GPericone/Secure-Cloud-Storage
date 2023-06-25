@@ -104,7 +104,7 @@ int recv_all(int socket, void *buffer, ssize_t len)
  * @param username the username to check
  * @return true if the username is registered, false otherwise
  */
-bool isRegistered(std::string_view username)
+bool isRegistered(std::string username)
 {
     std::string line;
     std::string word;
@@ -178,6 +178,22 @@ void deleteBuffers(T *buffer, Ts *...buffers)
     deleteBuffers(buffers...);
 }
 
+double get_double_file_size(std::string const &path)
+{
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+    {
+        return 0.0;
+    }
+
+    std::streampos fileSize = file.tellg();
+    file.close();
+
+    printf("File size: %f\n", static_cast<double>(fileSize));
+
+    return static_cast<double>(fileSize);
+}
+
 bool send_file(Session *session, std::string const &file_path)
 {
     std::ifstream input_file(file_path, std::ios::binary);
@@ -192,7 +208,7 @@ bool send_file(Session *session, std::string const &file_path)
     // Leggi il file a blocchi di 1 MB alla volta e invia ogni blocco
     std::string buffer;
     // int file_size = get_file_size_no_ext(file_path);
-    auto file_size = (double)std::filesystem::file_size(file_path);
+    auto file_size = get_double_file_size(file_path);
     int num_sends = static_cast<int>((file_size + CHUNK_SIZE - 1) / CHUNK_SIZE);
     for (int i = 0; i < num_sends; ++i)
     {
@@ -204,11 +220,12 @@ bool send_file(Session *session, std::string const &file_path)
             esito = 0;
         }
         buffer.resize(bytes_to_read);
-        input_file.read(buffer.data(), bytes_to_read);
-        if (!send_message(session, buffer, true, esito)) // inviare il flag finale solo per l'ultimo chunk
+        input_file.read(&buffer[0], bytes_to_read);
+        std::copy(buffer.begin(), buffer.end(), const_cast<char *>(buffer.data()));
+
+        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, esito)) // inviare il flag finale solo per l'ultimo chunk
         {
             std::cerr << "Errore durante l'invio del file " << file_path << std::endl;
-            buffer.clear();
             input_file.close();
             return false;
         }
@@ -237,18 +254,15 @@ bool send_file(Session *session, std::string const &file_path)
     }
 }
 
-std::string get_file_size_no_ext(std::string const &path)
+std::string get_file_size_no_ext(const std::string &path)
 {
-    if (std::filesystem::is_directory(path))
+    auto mantissa = get_double_file_size(path);
+    int i = 0;
+    for (; mantissa >= 1024.0; mantissa /= 1024.0, ++i)
     {
-        return "";
+        // Stiamo solo cercando la mantissa, nessuna operazione richiesta
     }
-    int i{};
-    auto mantissa = (double)std::filesystem::file_size(path);
-    for (; mantissa >= 1024.; mantissa /= 1024., ++i)
-    {
-        // stiamo solo cercando la mantissa, nessuna operazione richiesta;
-    }
+
     std::stringstream stream;
     stream << std::fixed << std::setprecision(2) << mantissa;
     return stream.str();
@@ -256,16 +270,13 @@ std::string get_file_size_no_ext(std::string const &path)
 
 std::string get_file_size(std::string const &path)
 {
-    if (std::filesystem::is_directory(path))
+    auto mantissa = get_double_file_size(path);
+    int i = 0;
+    for (; mantissa >= 1024.0; mantissa /= 1024.0, ++i)
     {
-        return "";
+        // Stiamo solo cercando la mantissa, nessuna operazione richiesta
     }
-    int i{};
-    auto mantissa = (double)std::filesystem::file_size(path);
-    for (; mantissa >= 1024.; mantissa /= 1024., ++i)
-    {
-        // stiamo solo cercando la mantissa, nessuna operazione richiesta;
-    }
+
     std::stringstream stream;
     stream << std::fixed << std::setprecision(2) << mantissa;
     return stream.str() + " " + "BKMGTPE"[i] + std::string((i == 0) ? "yte" : "B");
@@ -563,31 +574,24 @@ bool UploadServer::execute(Session *session, std::string command)
 
 bool check_availability_to_download(std::string const &path, std::string *response)
 {
-    if (std::filesystem::is_directory(path))
+
+    // Check file size
+    std::ifstream input_file(path, std::ios::binary);
+    if (!input_file.is_open())
     {
-        *response = "Il file è una directory, impossibile scaricarla";
+        *response = "Errore: impossibile aprire il file " + path + ".";
         return false;
     }
-    else if (!std::filesystem::exists(path))
+    input_file.seekg(0, std::ios::end);
+    std::streampos file_size = input_file.tellg();
+    input_file.seekg(0, std::ios::beg);
+    if (file_size > UINT32_MAX)
     {
-        *response = "Il file non esiste";
+        *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
         return false;
     }
-    else
-    {
-        // Check file size
-        std::ifstream input_file(path, std::ios::binary);
-        input_file.seekg(0, std::ios::end);
-        std::streampos file_size = input_file.tellg();
-        input_file.seekg(0, std::ios::beg);
-        if (file_size > UINT32_MAX)
-        {
-            *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
-            return false;
-        }
-        *response = "Il file esiste," + path + " ha una dimensione di " + get_file_size(path) + " sei sicuro di voler effettuare il download? (s/n)";
-        return true;
-    }
+    *response = "Il file esiste," + path + " ha una dimensione di " + get_file_size(path) + " sei sicuro di voler effettuare il download? (s/n)";
+    return true;
 }
 
 bool DownloadServer::execute(Session *session, std::string command)
@@ -658,12 +662,8 @@ bool DownloadServer::execute(Session *session, std::string command)
 
 bool check_file_existance(std::string const &path, std::string *response)
 {
-    if (std::filesystem::is_directory(path))
-    {
-        *response = "Il file è una directory, impossibile eliminarla";
-        return false;
-    }
-    else if (!std::filesystem::exists(path))
+    std::ifstream input_file(path, std::ios::binary);
+    if (!input_file.is_open())
     {
         *response = "Il file non esiste";
         return false;
@@ -677,10 +677,9 @@ bool check_file_existance(std::string const &path, std::string *response)
 
 std::string delete_file(std::string const &path)
 {
-    if (std::filesystem::exists(path))
+    if (std::remove(path.c_str()) == 0)
     {
-        std::filesystem::remove(path);
-        return "File " + path + " eliminato con successo\n ";
+        return "File " + path + " eliminato con successo\n";
     }
     return "File non trovato";
 }
@@ -709,7 +708,7 @@ bool DeleteServer::execute(Session *session, std::string command)
     std::string file_to_delete = "server_file/users/" + session->username + "/" + tokens[1];
 
     printf("file_to_delete: %s\n", file_to_delete.c_str());
-
+    //TODO: verifica nome file 
     std::string response_existance;
     bool exists = check_file_existance(file_to_delete, &response_existance);
     if (!send_message(session, response_existance, true, exists))

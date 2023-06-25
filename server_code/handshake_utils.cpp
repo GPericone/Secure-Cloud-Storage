@@ -14,7 +14,7 @@ bool send_message1(Session *server_session)
     memcpy(server_session->nonceServer, nonceS, NONCE_LEN);
 
     // Send message to the server over the socket
-    if (int bytes_sent = send(server_session->socket, nonceS, NONCE_LEN, 0); bytes_sent < 0)
+    if (send(server_session->socket, nonceS, NONCE_LEN, 0) < 0)
     {
         log_error("Error sending message");
         return false;
@@ -202,7 +202,10 @@ bool receive_message2(Session *server_session)
     printf("User %s connected\n", username_str.c_str());
     // Add username and ephemeral key to server session
     server_session->username = username_str;
-    server_session->eph_key_pub = EVP_PKEY_dup(eph_key_pub);
+    
+    printf("Username: %s\n", server_session->username.c_str());
+    server_session->eph_key_pub = duplicate_key(eph_key_pub);
+    printf("Ephemeral public key: %s\n", serialized_eph_key_pub);
 
     // Free buffers
     delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
@@ -284,18 +287,18 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     }
     // DIGITAL SIGNATURE
     // Serialize the ciphertext length and the encrypted envelope key length
-    unsigned char *ciphertext_len_byte = new unsigned char[sizeof(int)];
-    serialize_int(ciphertext_len, ciphertext_len_byte);
+    unsigned char *ciphertext_len_byte = new unsigned char[sizeof(long int)];
+    serialize_longint(ciphertext_len, ciphertext_len_byte, sizeof(long int));
 
     // Allocate the buffer for the to_sign data
     // to_sign: ciphertext_len + ciphertext + nonceC
-    int to_sign_len = sizeof(int) + ciphertext_len + NONCE_LEN;
+    int to_sign_len = sizeof(long int) + ciphertext_len + NONCE_LEN;
     unsigned char *to_sign = new unsigned char[to_sign_len];
 
     // Copy the data to the to_sign buffer
-    memcpy(to_sign, ciphertext_len_byte, sizeof(int));
-    memcpy(to_sign + sizeof(int), ciphertext, ciphertext_len);
-    memcpy(to_sign + sizeof(int) + ciphertext_len, server_session->nonceClient, NONCE_LEN);
+    memcpy(to_sign, ciphertext_len_byte, sizeof(long int));
+    memcpy(to_sign + sizeof(long int), ciphertext, ciphertext_len);
+    memcpy(to_sign + sizeof(long int) + ciphertext_len, server_session->nonceClient, NONCE_LEN);
 
     // Create the digital signature
     int signature_len = EVP_PKEY_size(server_private_key);

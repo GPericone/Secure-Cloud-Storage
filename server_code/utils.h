@@ -1,3 +1,5 @@
+//TODO: unsigned nei messaggi
+
 #ifndef UTILS_H
 #define UTILS_H
 
@@ -8,7 +10,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <list>
-#include <filesystem>
+#include <iomanip>
 #include <fstream>
 #include <dirent.h>
 #include <sstream>
@@ -104,7 +106,7 @@ public:
     bool execute(Session *session, const std::string command) override;
 };
 // USER
-bool isRegistered(std::string_view username);
+bool isRegistered(std::string username);
 
 // MANAGE MESSAGES
 bool send_message1(Session *server_session);
@@ -167,5 +169,7 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
                    unsigned char *plaintext);
 
 bool rsaEncrypt(const unsigned char* plaintext, size_t plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, size_t& ciphertextLength);
+
+EVP_PKEY* duplicate_key(EVP_PKEY* pkey);
 
 #endif

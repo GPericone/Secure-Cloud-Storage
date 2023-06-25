@@ -85,7 +85,8 @@ void handle_client(int newSd)
 
         printf("Comando ricevuto: %s\n", command.c_str());
 
-        if (auto iter = server_command_map.find(command.substr(0, command.find(' '))); iter != server_command_map.end())
+        auto iter = server_command_map.find(command.substr(0, command.find(' ')));
+        if (iter != server_command_map.end())
         {
             if (iter->second->execute(session.get(), command) == false)
             {
@@ -95,7 +96,6 @@ void handle_client(int newSd)
         else
         {
             printf("Comando non riconosciuto\n");
-            break;
         }
     }
     session.reset();
