@@ -283,7 +283,6 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     }
 
     EVP_MD_CTX_free(ctx);
-    std::cout << "Signature verified successfully" << std::endl;
     return ret;
 }
 
@@ -474,7 +473,7 @@ bool rsaEncrypt(const unsigned char *plaintext, size_t plaintextLength, EVP_PKEY
     int rsaKeySize = RSA_size(rsaKey);
     ciphertext = new unsigned char[rsaKeySize];
 
-    int result = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_PADDING);
+    int result = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_OAEP_PADDING);
     if (result == -1)
     {
         std::cerr << "Error encrypting with RSA." << std::endl;

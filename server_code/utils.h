@@ -132,6 +132,7 @@ void delete_buffers(T *buffer, Ts *...buffers);
 int safe_size_t_to_int(size_t value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size);
+bool deserialize_longint(const unsigned char *buffer, long int *result);
 
 int recv_all(int socket, void *buffer, ssize_t len);
 void log_error(const std::string &msg);

@@ -36,25 +36,13 @@ bool send_message1(Session *server_session)
  * @return true on success, false on failure.
  */
 bool receive_message2(Session *server_session)
-{
-
-    // Read payload length from the socket and deserialize it
-    int payload_len;
-    unsigned char *payload_len_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(server_session->socket, (void *)payload_len_byte, sizeof(int))) != sizeof(int))
-    {
-        log_error("Failed to read payload length");
-        delete_buffers(payload_len_byte);
-        return false;
-    }
-    memcpy(&payload_len, payload_len_byte, sizeof(int));
-
+{  
     // Read nonce
     unsigned char *nonce = new unsigned char[NONCE_LEN];
     if ((recv_all(server_session->socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
     {
         log_error("Failed to receive the nonce");
-        delete_buffers(payload_len_byte, nonce);
+        delete_buffers(nonce);
         return false;
     }
 
@@ -64,7 +52,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)username_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read username length");
-        delete_buffers(payload_len_byte, nonce, username_len_byte);
+        delete_buffers(nonce, username_len_byte);
         return false;
     }
     memcpy(&user_len, username_len_byte, sizeof(int));
@@ -74,7 +62,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)username, user_len)) != user_len)
     {
         log_error("Failed to receive the username");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username);
+        delete_buffers(nonce, username_len_byte, username);
         return false;
     }
 
@@ -85,7 +73,7 @@ bool receive_message2(Session *server_session)
     if (!isRegistered(username_str))
     {
         log_error("User not registered");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username);
+        delete_buffers(nonce, username_len_byte, username);
         return false;
     }
 
@@ -95,7 +83,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)key_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read key length");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte);
         return false;
     }
     memcpy(&key_len, key_len_byte, sizeof(int));
@@ -105,7 +93,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)serialized_eph_key_pub, key_len)) != key_len)
     {
         log_error("Failed to receive the ephemeral key");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub);
         return false;
     }
 
@@ -114,7 +102,7 @@ bool receive_message2(Session *server_session)
     if ((eph_key_pub = deserialize_public_key(serialized_eph_key_pub, key_len)) == nullptr)
     {
         log_error("Failed to deserialize the ephemeral key");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub);
         return false;
     }
 
@@ -123,7 +111,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)nonceS, NONCE_LEN)) != NONCE_LEN)
     {
         log_error("Failed to receive the nonceS");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS);
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
@@ -132,7 +120,7 @@ bool receive_message2(Session *server_session)
     if (memcmp(nonceS, server_session->nonceServer, NONCE_LEN) != 0)
     {
         log_error("NonceS is not equal to nonceServer");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS);
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
@@ -143,7 +131,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)signature_len_byte, sizeof(int))) != sizeof(int))
     {
         log_error("Failed to read signature length");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte);
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
@@ -154,7 +142,7 @@ bool receive_message2(Session *server_session)
     if ((recv_all(server_session->socket, (void *)signature, signature_len)) != signature_len)
     {
         log_error("Failed to receive the signature");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature);
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
@@ -168,7 +156,7 @@ bool receive_message2(Session *server_session)
     if (client_public_key == nullptr)
     {
         log_error("Failed to load the client public key");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature);
         EVP_PKEY_free(eph_key_pub);
         return false;
     }
@@ -189,7 +177,7 @@ bool receive_message2(Session *server_session)
     if ((verify_digital_signature(client_public_key, signature, signature_len, to_verify, to_verify_len)) != 1)
     {
         log_error("Failed to verify the signature");
-        delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
+        delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
         EVP_PKEY_free(client_public_key);
         EVP_PKEY_free(eph_key_pub);
         return false;
@@ -208,7 +196,7 @@ bool receive_message2(Session *server_session)
     printf("Ephemeral public key: %s\n", serialized_eph_key_pub);
 
     // Free buffers
-    delete_buffers(payload_len_byte, nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
+    delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
     EVP_PKEY_free(client_public_key);
     EVP_PKEY_free(eph_key_pub);
     return true;
@@ -314,41 +302,36 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
 
     // Allocate the buffer for the payload size
     // payload: cert len | certificate | to sign len | to sign | signature len | signature | nonceS
-    unsigned char *payload_size_byte = new unsigned char[sizeof(int)];
     unsigned char *to_sign_len_byte = new unsigned char[sizeof(int)];
     unsigned char *signature_len_byte = new unsigned char[sizeof(int)];
 
-    size_t payload_size = sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int) + signature_len;
-
     // Serialize the payload size, the to_sign length, and the signature length
-    serialize_int(safe_size_t_to_int(payload_size), payload_size_byte);
     serialize_int(to_sign_len, to_sign_len_byte);
     serialize_int(signature_len, signature_len_byte);
 
     // Allocate the message buffer
-    size_t message_size = payload_size + sizeof(int);
+    size_t message_size = sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int) + signature_len;
     unsigned char *message = new unsigned char[message_size];
 
     // Copy the data to the message buffer
-    memcpy(message, payload_size_byte, sizeof(int));
-    memcpy(message + sizeof(int), cert_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + sizeof(int), certificate_byte, cert_len);
-    memcpy(message + sizeof(int) + sizeof(int) + cert_len, to_sign_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + sizeof(int) + cert_len + sizeof(int), to_sign, to_sign_len);
-    memcpy(message + sizeof(int) + sizeof(int) + cert_len + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int), signature, signature_len);
+    memcpy(message, cert_len_byte, sizeof(int));
+    memcpy(message + sizeof(int), certificate_byte, cert_len);
+    memcpy(message + sizeof(int) + cert_len, to_sign_len_byte, sizeof(int));
+    memcpy(message + sizeof(int) + cert_len + sizeof(int), to_sign, to_sign_len);
+    memcpy(message + sizeof(int) + cert_len + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
+    memcpy(message + sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int), signature, signature_len);
 
     if (send(server_session->socket, message, message_size, 0) < 0)
     {
         log_error("Error sending message");
-        delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature, payload_size_byte, to_sign_len_byte, signature_len_byte, message);
+        delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature, to_sign_len_byte, signature_len_byte, message);
         X509_free(certificate);
         OPENSSL_free(certificate_byte);
         return false;
     }
 
     // Free the buffers
-    delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature, payload_size_byte, to_sign_len_byte, signature_len_byte, message);
+    delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature, to_sign_len_byte, signature_len_byte, message);
     X509_free(certificate);
     OPENSSL_free(certificate_byte);
 

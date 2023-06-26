@@ -31,6 +31,8 @@
 #include <sys/stat.h>
 #include <regex>
 
+const std::regex username_pattern("[A-Za-z]+");
+extern bool DEBUG_MODE;
 const int CHUNK_SIZE = 1000000;
 const size_t MAX_PATH = 512;
 const size_t NONCE_LEN = 16;
@@ -131,11 +133,12 @@ void delete_buffers(T *buffer, Ts *...buffers);
 #endif
 
 int size_t_to_int(size_t value);
+size_t int_to_size_t(int value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size);
 
 bool recv_all(int socket, void *buffer, ssize_t len);
-void log_error(const std::string &msg);
+void log_error(const std::string &msg, bool debug);
 
 // CERTIFICATES
 

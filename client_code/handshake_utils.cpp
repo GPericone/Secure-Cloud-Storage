@@ -1,14 +1,23 @@
 #include "utils.h"
 
+/**
+ * @brief The client receives the server's nonce
+ * 
+ * @param client_session the client's session struct
+ * @return true if the message is received correctly, false otherwise
+ */
 bool receive_message1(Session *client_session)
 {
-    // riceve il nonce del server e lo salva
+    // Allocate memory for the server's nonce
     unsigned char *nonceS = new unsigned char[NONCE_LEN];
+    // Receive the nonce from the server
     if (!recv_all(client_session->socket, nonceS, NONCE_LEN))
     {
-        log_error("Error receiving message");
+        log_error("Error receiving message", true);
         return false;
     }   
+
+    // Copy the server's nonce into the client's session
     memcpy(client_session->nonceServer, nonceS, NONCE_LEN);
     printf("Nonce received from server\n");
     return true;
@@ -22,20 +31,23 @@ bool send_message2(Session *client_session)
     std::cin >> username;
 
     // Check username
-    if (username.empty() || username.size() > USERNAMESIZE)
+    if (username.empty() || username.size() > USERNAMESIZE || !std::regex_match(username, username_pattern))
     {
-        log_error("Invalid username");
+        log_error("Invalid username", false);
         return false;
     }
-
     // Load the client private key
     char abs_path[MAX_PATH];
-    getcwd(abs_path, MAX_PATH);
+    if(!getcwd(abs_path, MAX_PATH))
+    {
+        log_error("Error getting current working directory", true);
+        return false;
+    };
     std::string path = std::string(abs_path) + "/client_file/keys/" + username + "_private_key.pem";
     EVP_PKEY *client_private_key = load_private_key(path.c_str());
     if (client_private_key == nullptr)
     {
-        log_error("Failed to load the client private key");
+        log_error("Failed to load the client private key", true);
         return false;
     }
 
@@ -45,7 +57,7 @@ bool send_message2(Session *client_session)
 
     if (!generateEphKeys(&eph_key_priv, &eph_key_pub))
     {
-        log_error("Error generating ephemeral keys");
+        log_error("Error generating ephemeral keys", true);
         EVP_PKEY_free(client_private_key);
         return false;
     }
@@ -63,7 +75,7 @@ bool send_message2(Session *client_session)
     unsigned char *nonce = new unsigned char[NONCE_LEN];
     if (RAND_bytes(nonce, NONCE_LEN) != 1)
     {
-        log_error("Error generating nonce");
+        log_error("Error generating nonce", true);
         delete_buffers(username_len_byte, nonce);
         EVP_PKEY_free(client_private_key);
         EVP_PKEY_free(eph_key_priv);
@@ -74,7 +86,6 @@ bool send_message2(Session *client_session)
     memcpy(client_session->nonceClient, nonce, NONCE_LEN);
 
     // Serialize the ephemeral public key
-    //TODO: 2048 byte? 
     unsigned char *serialized_eph_key_pub = new unsigned char[2048];
     int key_len = serialize_public_key(eph_key_pub, &serialized_eph_key_pub);
 
@@ -83,7 +94,7 @@ bool send_message2(Session *client_session)
     unsigned char *signature = new unsigned char[signature_len];
 
     // Calculate the length of the data to sign and allocate the buffer
-    size_t to_sign_len = NONCE_LEN + sizeof(int) + size_t_to_int(username.size()) + sizeof(int) + key_len + NONCE_LEN;
+    size_t to_sign_len = NONCE_LEN + sizeof(int) + username.size() + sizeof(int) + int_to_size_t(key_len) + NONCE_LEN;
     unsigned char *to_sign = new unsigned char[to_sign_len];
 
     // Serialize the key length
@@ -102,7 +113,7 @@ bool send_message2(Session *client_session)
     // Sign the buffer
     if (create_digital_signature(client_private_key, to_sign, to_sign_len, signature) != signature_len)
     {
-        log_error("Failed to create digital signature");
+        log_error("Failed to create digital signature", true);
         delete_buffers(username_len_byte, nonce, serialized_eph_key_pub, signature, to_sign, key_len_byte);
         EVP_PKEY_free(client_private_key);
         EVP_PKEY_free(eph_key_priv);
@@ -115,28 +126,18 @@ bool send_message2(Session *client_session)
     serialize_int(signature_len, signature_len_byte);
 
     // Calculate payload size
-    int payload_size = to_sign_len + sizeof(int) + signature_len;
-
-    // Serialize payload size
-    unsigned char *payload_size_byte = new unsigned char[sizeof(int)];
-    serialize_int(payload_size, payload_size_byte);
-
-    // Calculate message size and allocate the buffer
-    int message_size = sizeof(int) + payload_size;
+    size_t message_size = to_sign_len + sizeof(int) + int_to_size_t(signature_len);
     unsigned char *message = new unsigned char[message_size];
 
-    // Copy payload size, buffer to sign and signature into the message
-    // message: payload_size | nonce | username_len | username | key_len | ephemeral_key | signature_len | signature
-    memcpy(message, payload_size_byte, sizeof(int));
-    memcpy(message + sizeof(int), to_sign, to_sign_len);
-    memcpy(message + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + to_sign_len + sizeof(int), signature, signature_len);
+    memcpy(message, to_sign, to_sign_len);
+    memcpy(message + to_sign_len, signature_len_byte, sizeof(int));
+    memcpy(message + to_sign_len + sizeof(int), signature, signature_len);
 
     // Send message to the server over the socket
     if (send(client_session->socket, message, message_size, 0) < 0)
     {
-        log_error("Error sending message");
-        delete_buffers(username_len_byte, nonce, serialized_eph_key_pub, signature, to_sign, key_len_byte, signature_len_byte, payload_size_byte, message);
+        log_error("Error sending message", true);
+        delete_buffers(username_len_byte, nonce, serialized_eph_key_pub, signature, to_sign, key_len_byte, signature_len_byte, message);
         EVP_PKEY_free(client_private_key);
         EVP_PKEY_free(eph_key_priv);
         EVP_PKEY_free(eph_key_pub);
@@ -144,7 +145,7 @@ bool send_message2(Session *client_session)
     }
 
     // Free buffers
-    delete_buffers(username_len_byte, nonce, serialized_eph_key_pub, signature, to_sign, key_len_byte, signature_len_byte, payload_size_byte, message);
+    delete_buffers(username_len_byte, nonce, serialized_eph_key_pub, signature, to_sign, key_len_byte, signature_len_byte, message);
     EVP_PKEY_free(client_private_key);
     EVP_PKEY_free(eph_key_priv);
     EVP_PKEY_free(eph_key_pub);
@@ -153,26 +154,13 @@ bool send_message2(Session *client_session)
 
 bool receive_message3(Session *client_session)
 {
-
-    // Receive the payload length and deserialize it
-    int payload_len;
-    unsigned char *payload_len_byte = new unsigned char[sizeof(int)];
-    // allocate_and_store_buffer(cl_free_buf, client_session->socket, sizeof(int), &payload_len_byte);
-    if (!recv_all(client_session->socket, (void *)payload_len_byte, sizeof(int)))
-    {
-        log_error("Error receiving payload length");
-        delete_buffers(payload_len_byte);
-        return false;
-    }
-    memcpy(&payload_len, payload_len_byte, sizeof(int));
-
     // Receive the certificate length and deserialize it
     int cert_len;
     unsigned char *cert_len_byte = new unsigned char[sizeof(int)];
     if (!recv_all(client_session->socket, (void *)cert_len_byte, sizeof(int)))
     {
-        log_error("Error receiving certificate length");
-        delete_buffers(payload_len_byte, cert_len_byte);
+        log_error("Error receiving certificate length", true);
+        delete_buffers(cert_len_byte);
         return false;
     }
     memcpy(&cert_len, cert_len_byte, sizeof(int));
@@ -181,16 +169,16 @@ bool receive_message3(Session *client_session)
     unsigned char *certificate_byte = new unsigned char[cert_len];
     if (!recv_all(client_session->socket, (void *)certificate_byte, cert_len))
     {
-        log_error("Error receiving certificate");
-        delete_buffers(payload_len_byte, cert_len_byte, certificate_byte);
+        log_error("Error receiving certificate", true);
+        delete_buffers(cert_len_byte, certificate_byte);
         return false;
     }
     X509 *certificate = nullptr;
     certificate = d2i_X509(&certificate, (const unsigned char **)&certificate_byte, cert_len);
     if (certificate == nullptr)
     {
-        log_error("Error deserializing certificate");
-        delete_buffers(payload_len_byte, cert_len_byte);
+        log_error("Error deserializing certificate", true);
+        delete_buffers(cert_len_byte);
         return false;
     }
 
@@ -199,8 +187,8 @@ bool receive_message3(Session *client_session)
     unsigned char *to_sign_len_byte = new unsigned char[sizeof(int)];
     if (!recv_all(client_session->socket, (void *)to_sign_len_byte, sizeof(int)))
     {
-        log_error("Error receiving to_sign length");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte);
+        log_error("Error receiving to_sign length", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte);
         X509_free(certificate);
         return false;
     }
@@ -210,8 +198,8 @@ bool receive_message3(Session *client_session)
     unsigned char *to_sign = new unsigned char[to_sign_len];
     if (!recv_all(client_session->socket, (void *)to_sign, to_sign_len))
     {
-        log_error("Error receiving to_sign");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign);
+        log_error("Error receiving to_sign", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign);
         X509_free(certificate);
         return false;
     }
@@ -221,8 +209,8 @@ bool receive_message3(Session *client_session)
     unsigned char *signature_len_byte = new unsigned char[sizeof(int)];
     if (!recv_all(client_session->socket, (void *)signature_len_byte, sizeof(int)))
     {
-        log_error("Error receiving signature length");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte);
+        log_error("Error receiving signature length", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte);
         X509_free(certificate);
         return false;
     }
@@ -232,8 +220,8 @@ bool receive_message3(Session *client_session)
     unsigned char *signature = new unsigned char[signature_len];
     if (!recv_all(client_session->socket, (void *)signature, signature_len))
     {
-        log_error("Error receiving signature");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error receiving signature", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         return false;
     }
@@ -247,8 +235,8 @@ bool receive_message3(Session *client_session)
     char abs_path[MAX_PATH];
     if (getcwd(abs_path, MAX_PATH) == nullptr)
     {
-        log_error("Error getting current working directory");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error getting current working directory", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         return false;
     }
@@ -257,8 +245,8 @@ bool receive_message3(Session *client_session)
     std::string CRL_path = std::string(abs_path) + "/client_file/CA/crl.pem";
     if (!load_certificate(CA_cert_path, &CA_certificate) || !load_crl(CRL_path, &crl))
     {
-        log_error("Error loading CA certificate or CRL");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error loading CA certificate or CRL", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         return false;
     }
@@ -267,8 +255,8 @@ bool receive_message3(Session *client_session)
     X509_STORE *store = nullptr;
     if (!create_store(&store, CA_certificate, crl))
     {
-        log_error("Error creating store");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error creating store", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -276,14 +264,10 @@ bool receive_message3(Session *client_session)
     }
 
     // Verify the certificate using the created store
-    if (verify_certificate(store, certificate))
+    if (!verify_certificate(store, certificate))
     {
-        std::cout << "Certificate is authentic" << std::endl;
-    }
-    else
-    {
-        log_error("Certificate is not authentic");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Certificate is not authentic", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -295,8 +279,8 @@ bool receive_message3(Session *client_session)
     EVP_PKEY *server_public_key = X509_get_pubkey(certificate);
     if (server_public_key == nullptr)
     {
-        log_error("Error extracting public key from certificate");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error extracting public key from certificate", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -307,8 +291,8 @@ bool receive_message3(Session *client_session)
     // Verify the signature using the server's public key
     if (verify_digital_signature(server_public_key, signature, signature_len, to_sign, to_sign_len) != 1)
     {
-        log_error("Error verifying signature");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
+        log_error("Error verifying signature", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -330,8 +314,8 @@ bool receive_message3(Session *client_session)
     // Check if the nonceC is equal to the one sent before by the client
     if (memcmp(client_session->nonceClient, nonceC, NONCE_LEN))
     {
-        log_error("Error: nonceC is not equal to the nonce sent before");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, nonceC);
+        log_error("Error: nonceC is not equal to the nonce sent before", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, nonceC);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -346,8 +330,8 @@ bool receive_message3(Session *client_session)
 
     if (!rsaDecrypt(ciphertext, ciphertext_len, client_session->eph_key_priv, plaintext, plaintext_len))
     {
-        log_error("Error decrypting ciphertext");
-        delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, plaintext, nonceC);
+        log_error("Error decrypting ciphertext", true);
+        delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, plaintext, nonceC);
         X509_free(certificate);
         X509_free(CA_certificate);
         X509_CRL_free(crl);
@@ -360,7 +344,7 @@ bool receive_message3(Session *client_session)
     memcpy(client_session->aes_key, plaintext, plaintext_len);
 
     // Free buffers
-    delete_buffers(payload_len_byte, cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, plaintext, nonceC);
+    delete_buffers(cert_len_byte, to_sign_len_byte, to_sign, signature_len_byte, signature, ciphertext, plaintext, nonceC);
     X509_free(certificate);
     X509_free(CA_certificate);
     X509_CRL_free(crl);
@@ -386,7 +370,7 @@ bool send_message4(Session *client_session)
     // Generate a random IV
     if (!RAND_bytes(iv, IV_LEN))
     {
-        log_error("Error generating IV");
+        log_error("Error generating IV", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext);
         return false;
     }
@@ -395,7 +379,7 @@ bool send_message4(Session *client_session)
     int ciphertext_len = aesgcm_encrypt(plaintext, 1, aad, 0, client_session->aes_key, iv, ciphertext, tag);
     if (ciphertext_len < 0)
     {
-        log_error("Error encrypting message");
+        log_error("Error encrypting message", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext);
         return false;
     }
@@ -413,7 +397,7 @@ bool send_message4(Session *client_session)
     // Send the message
     if (send(client_session->socket, message, message_size, 0) < 0)
     {
-        log_error("Error sending message");
+        log_error("Error sending message", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext, message);
         return false;
     }

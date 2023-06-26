@@ -7,9 +7,35 @@ int main(int argc, char **argv)
     const unsigned short int server_port = 4242;
     int sd;
 
-    if (argc != 1)
+    // Verifica che ci sia almeno un argomento
+    if (argc >= 2)
     {
-        ip_server = argv[1];
+        // Verifica che l'argomento sia un indirizzo IP valido
+        struct in_addr addr;
+        if (inet_pton(AF_INET, argv[1], &addr) == 1)
+        {
+            ip_server = argv[1];
+        }
+        else
+        {
+            log_error("Invalid IP address: " + std::string(argv[1]), false);
+            exit(1);
+        }
+    }
+
+    // Verifica che ci sia almeno un terzo argomento e che sia "-d"
+    if (argc >= 3)
+    {
+        if (strcmp(argv[2], "-d") == 0)
+        {
+            // Imposta DEBUG_MODE su true
+            DEBUG_MODE = true;
+        }
+        else
+        {
+            log_error("Invalid argument: " + std::string(argv[2]), false);
+            exit(1);
+        }
     }
 
     // Create socket
@@ -22,7 +48,8 @@ int main(int argc, char **argv)
     
     if (sd < 0 || connect(sd, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) < 0)
     {
-        log_error("Error in connection, socket=%d" + std::to_string(sd));
+        log_error("Error in connection, socket=%d" + std::to_string(sd), true);
+        log_error("Error in connection", false);
         exit(1);
     }
 
@@ -32,29 +59,33 @@ int main(int argc, char **argv)
 
     if (!receive_message1(session.get()))
     {
-        log_error("Error receiving message 0");
+        log_error("Error receiving message 1", true);
+        log_error("Error during authentication", false);
         exit(1);
     }
 
     if (!send_message2(session.get()))
     {
-        log_error("Error sending message 1");
+        log_error("Error sending message 2", true);
+        log_error("Error during authentication", false);
         exit(1);
     }
 
     if (!receive_message3(session.get()))
     {
-        log_error("Error receiving message 2");
+        log_error("Error receiving message 3", true);
+        log_error("Error during authentication", false);
         exit(1);
     }
 
     if (!send_message4(session.get()))
     {
-        log_error("Error sending message 3");
+        log_error("Error sending message 4", true);
+        log_error("Error during authentication", false);
         exit(1);
     }
 
-    std::cout << "Handshake completed successfully" << std::endl;
+    std::cout << "Authentication completed successfully" << std::endl;
 
     // Delete the ephemeral keys
     EVP_PKEY_free(session->eph_key_pub);
@@ -93,7 +124,7 @@ int main(int argc, char **argv)
         {
             if (!send_message(session.get(), command))
             {
-                log_error("Error in sending message");
+                log_error("Error in sending message", false);
                 break;
             }
             if (iter->second->execute(session.get(), command) == false)

@@ -36,7 +36,7 @@ void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size
     }
 }
 
-bool deserializeNumber(const unsigned char *buffer, long int *result)
+bool deserialize_longint(const unsigned char *buffer, long int *result)
 {
     if (buffer == nullptr || result == nullptr)
     {
@@ -379,7 +379,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
         delete_buffers(message_len_byte);
         return false;
     }
-    deserializeNumber(message_len_byte, &message_len);
+    deserialize_longint(message_len_byte, &message_len);
     printf("Message length: %ld\n", message_len);
 
     // Allocate buffers for the ciphertext and plaintext
@@ -639,7 +639,6 @@ bool DownloadServer::execute(Session *session, std::string command)
         // se response è uguale a s elimino altrimenti no
         if (response == "s")
         {
-            // TODO: divido il file in chunk di 1 MB e li invio
             if (!send_file(session, file_to_download.c_str()))
             {
                 log_error("Failed to send file");

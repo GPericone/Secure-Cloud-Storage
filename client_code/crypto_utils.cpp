@@ -282,14 +282,14 @@ int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, s
 
     if (!ctx)
     {
-        log_error("Failed to create digital signature context");
+        log_error("Failed to create digital signature context", true);
         return -1;
     }
 
     ret = EVP_SignInit(ctx, digest);
     if (ret != 1)
     {
-        log_error("Failed to initialize digital signature context");
+        log_error("Failed to initialize digital signature context", true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -297,7 +297,7 @@ int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, s
     ret = EVP_SignUpdate(ctx, data, data_len);
     if (ret != 1)
     {
-        log_error("Failed to update digital signature context");
+        log_error("Failed to update digital signature context", true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -305,7 +305,7 @@ int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, s
     ret = EVP_SignFinal(ctx, signature, &signature_len, private_key);
     if (ret != 1)
     {
-        log_error("Failed to finalize digital signature");
+        log_error("Failed to finalize digital signature", true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -322,14 +322,14 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 
     if (!ctx)
     {
-        log_error("Failed to create digital signature context");
+        log_error("Failed to create digital signature context", true);
         return -1;
     }
 
     ret = EVP_VerifyInit(ctx, digest);
     if (ret != 1)
     {
-        log_error("Failed to initialize digital signature context");
+        log_error("Failed to initialize digital signature context", true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -337,7 +337,7 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     ret = EVP_VerifyUpdate(ctx, data, data_len);
     if (ret != 1)
     {
-        log_error("Failed to update digital signature context");
+        log_error("Failed to update digital signature context", true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -351,7 +351,6 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     }
 
     EVP_MD_CTX_free(ctx);
-    std::cout << "Signature verified successfully" << std::endl;
     return ret;
 }
 
@@ -512,7 +511,7 @@ bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PK
     plaintextLength = RSA_private_decrypt(size_t_to_int(ciphertextLength), ciphertext, plaintext, rsaKey, RSA_PKCS1_OAEP_PADDING);
     if (plaintextLength == -1)
     {
-        std::cerr << "Error decrypting with RSA." << std::endl;
+        log_error("Error decrypting with RSA.", true);
         ERR_print_errors_fp(stderr);
         RSA_free(rsaKey);
         return false;

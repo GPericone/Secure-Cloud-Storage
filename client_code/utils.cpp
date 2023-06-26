@@ -1,8 +1,15 @@
 #include "utils.h"
 
-void log_error(const std::string &msg)
+bool DEBUG_MODE = false;
+
+// Funzione per la stampa degli errori
+void log_error(const std::string &msg, bool debug)
 {
-    std::cerr << "Error: " << msg << std::endl;
+    // If the global variable DEBUG_MODE is true and the debug parameter is true, or if debug is false, print the error message
+    if ((DEBUG_MODE && debug) || !debug)
+    {
+        std::cerr << "Error: " << msg << std::endl;
+    }
 }
 
 int longint_to_int(long int value) {
@@ -53,6 +60,16 @@ bool deserialize_longint(const unsigned char *buffer, long int *result)
     return true;
 }
 
+size_t int_to_size_t(int value)
+{
+    if (value < 0)
+    {
+        throw std::runtime_error("Conversion error: int value is negative");
+    }
+
+    return static_cast<size_t>(value);
+}
+
 bool recv_all(int socket, void *buffer, ssize_t len)
 {
     ssize_t bytes_left = len;                       // The number of bytes remaining to be received
@@ -66,7 +83,7 @@ bool recv_all(int socket, void *buffer, ssize_t len)
 
         if (bytes_read < 0)
         {
-            log_error("Failed to receive data from the socket");
+            log_error("Failed to receive data from the socket", true);
             return false;
         }
 
@@ -235,7 +252,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     // Generate a random IV
     if (!RAND_bytes(iv, IV_LEN))
     {
-        log_error("Error generating IV");
+        log_error("Error generating IV", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte);
         return false;
     }
@@ -244,7 +261,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     int ciphertext_len = aesgcm_encrypt(plaintext, size_t_to_int(payload.size()), aad, aad_len, session->aes_key, iv, ciphertext, tag);
     if (ciphertext_len < 0)
     {
-        log_error("Error encrypting message");
+        log_error("Error encrypting message", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte);
         return false;
     }
@@ -262,7 +279,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     // Send the message
     if (send(session->socket, message, message_size, 0) < 0)
     {
-        log_error("Error sending message");
+        log_error("Error sending message", true);
         delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte, message);
         return false;
     }
@@ -325,7 +342,7 @@ bool UploadClient::execute(Session *session, std::string command)
     bool check_file = check_availability_to_upload(file_to_upload, &response_existance);
     if (!send_message(session, response_existance, true, check_file))
     {
-        log_error("Error sending message");
+        log_error("Error sending message", false);
         return false;
     }
 
@@ -335,16 +352,15 @@ bool UploadClient::execute(Session *session, std::string command)
         unsigned int success;
         if (!receive_message(session, &response, true, &success))
         {
-            log_error("Error receiving message");
+            log_error("Error receiving message", false);
             return false;
         }
 
         if (success == 1)
         {
-            // TODO: divido il file in chunk di 1 MB e li invio
             if (!send_file(session, file_to_upload.c_str()))
             {
-                log_error("Error sending file");
+                log_error("Error sending file", false);
                 return false;
             }
         }
@@ -377,7 +393,7 @@ bool DownloadClient::execute(Session *session, std::string command)
     unsigned int exists;
     if (!receive_message(session, &response_existance, true, &exists))
     {
-        log_error("Error receiving message");
+        log_error("Error receiving message", false);
         return false;
     }
 
@@ -394,7 +410,7 @@ bool DownloadClient::execute(Session *session, std::string command)
         std::string response;
         if (!send_message(session, esito))
         {
-            log_error("Error sending message");
+            log_error("Error sending message", false);
             return false;
         }
 
@@ -431,7 +447,7 @@ bool DownloadClient::execute(Session *session, std::string command)
 
     if (!send_message(session, "File scaricato correttamente\n", true, 1))
     {
-        log_error("Error sending message");
+        log_error("Error sending message", false);
         return false;
     }
     return true;
@@ -443,7 +459,7 @@ bool DeleteClient::execute(Session *session, std::string command)
     unsigned int exists;
     if (!receive_message(session, &response_existance, true, &exists))
     {
-        log_error("Error receiving message");
+        log_error("Error receiving message", false);
         return false;
     }
 
@@ -458,14 +474,14 @@ bool DeleteClient::execute(Session *session, std::string command)
         std::string response;
         if (!send_message(session, esito))
         {
-            log_error("Error sending message");
+            log_error("Error sending message", false);
             return false;
         }
 
         std::string response_delete;
         if (!receive_message(session, &response_delete))
         {
-            log_error("Error receiving message");
+            log_error("Error receiving message", false);
             return false;
         }
 
@@ -484,7 +500,7 @@ bool ListClient::execute(Session *session, std::string command)
     std::string response;
     if (!receive_message(session, &response))
     {
-        log_error("Failed to receive message");
+        log_error("Failed to receive message", false);
         return false;
     }
     printf("%s\n", response.c_str());
@@ -497,7 +513,7 @@ bool RenameClient::execute(Session *session, std::string command)
     std::string response;
     if (!receive_message(session, &response))
     {
-        log_error("Failed to receive message");
+        log_error("Failed to receive message", false);
         return false;
     }
     printf("%s\n", response.c_str());
@@ -521,7 +537,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *message_len_byte = new unsigned char[sizeof(long int)];
     if (!recv_all(session->socket, (void *)message_len_byte, sizeof(long int)))
     {
-        log_error("Failed to read payload length");
+        log_error("Failed to read payload length", true);
         delete_buffers(message_len_byte);
         return false;
     }
@@ -537,7 +553,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     unsigned char *counter_byte = new unsigned char[sizeof(int)];
     if (!recv_all(session->socket, (void *)counter_byte, sizeof(int)))
     {
-        log_error("Failed to read counter");
+        log_error("Failed to read counter", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
         return false;
     }
@@ -545,7 +561,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
 
     if (counter != session->server_counter)
     {
-        log_error("Counter mismatch");
+        log_error("Counter mismatch", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
         return false;
     }
@@ -557,7 +573,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     {
         if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
         {
-            log_error("Failed to read esito");
+            log_error("Failed to read esito", true);
             delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
             return false;
         }
@@ -578,7 +594,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     // Receive the ciphertext
     if (!recv_all(session->socket, (void *)ciphertext, message_len))
     {
-        log_error("Error receiving ciphertext");
+        log_error("Error receiving ciphertext", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
         return false;
     }
@@ -586,7 +602,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     // Receive the tag
     if (!recv_all(session->socket, (void *)tag, TAG_LEN))
     {
-        log_error("Error receiving tag");
+        log_error("Error receiving tag", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
         return false;
     }
@@ -597,7 +613,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     // Receive the IV
     if (!recv_all(session->socket, (void *)iv, IV_LEN))
     {
-        log_error("Error receiving IV");
+        log_error("Error receiving IV", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
         return false;
     }
@@ -606,7 +622,7 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     int plaintext_len = aesgcm_decrypt(ciphertext, longint_to_int(message_len), aad, aad_len, tag, session->aes_key, iv, plaintext);
     if (plaintext_len < 0)
     {
-        log_error("Error decrypting message");
+        log_error("Error decrypting message", true);
         delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
         return false;
     }
