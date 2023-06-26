@@ -57,6 +57,16 @@ bool deserialize_longint(const unsigned char *buffer, long int *result)
     return true;
 }
 
+size_t int_to_size_t(int value)
+{
+    if (value < 0)
+    {
+        throw std::runtime_error("Conversion error: int value is negative");
+    }
+
+    return static_cast<size_t>(value);
+}
+
 /**
  * @brief Receive a specified number of bytes from a socket.
  *

@@ -280,7 +280,7 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
 
     // Allocate the buffer for the to_sign data
     // to_sign: ciphertext_len + ciphertext + nonceC
-    int to_sign_len = sizeof(long int) + ciphertext_len + NONCE_LEN;
+    size_t to_sign_len = sizeof(long int) + ciphertext_len + NONCE_LEN;
     unsigned char *to_sign = new unsigned char[to_sign_len];
 
     // Copy the data to the to_sign buffer
@@ -291,7 +291,7 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     // Create the digital signature
     int signature_len = EVP_PKEY_size(server_private_key);
     unsigned char *signature = new unsigned char[signature_len];
-    if (create_digital_signature(server_private_key, to_sign, to_sign_len, signature) != signature_len)
+    if (create_digital_signature(server_private_key, to_sign, safe_size_t_to_int(to_sign_len), signature) != signature_len)
     {
         log_error("Failed to create digital signature");
         delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature);
@@ -306,20 +306,20 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     unsigned char *signature_len_byte = new unsigned char[sizeof(int)];
 
     // Serialize the payload size, the to_sign length, and the signature length
-    serialize_int(to_sign_len, to_sign_len_byte);
+    serialize_longint(to_sign_len, to_sign_len_byte, sizeof(long int));
     serialize_int(signature_len, signature_len_byte);
 
     // Allocate the message buffer
-    size_t message_size = sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int) + signature_len;
+    size_t message_size = sizeof(int) + cert_len + sizeof(long int) + to_sign_len + sizeof(int) + int_to_size_t(signature_len);
     unsigned char *message = new unsigned char[message_size];
 
     // Copy the data to the message buffer
     memcpy(message, cert_len_byte, sizeof(int));
     memcpy(message + sizeof(int), certificate_byte, cert_len);
-    memcpy(message + sizeof(int) + cert_len, to_sign_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + cert_len + sizeof(int), to_sign, to_sign_len);
-    memcpy(message + sizeof(int) + cert_len + sizeof(int) + to_sign_len, signature_len_byte, sizeof(int));
-    memcpy(message + sizeof(int) + cert_len + sizeof(int) + to_sign_len + sizeof(int), signature, signature_len);
+    memcpy(message + sizeof(int) + cert_len, to_sign_len_byte, sizeof(long int));
+    memcpy(message + sizeof(int) + cert_len + sizeof(long int), to_sign, to_sign_len);
+    memcpy(message + sizeof(int) + cert_len + sizeof(long int) + to_sign_len, signature_len_byte, sizeof(int));
+    memcpy(message + sizeof(int) + cert_len + sizeof(long int) + to_sign_len + sizeof(int), signature, signature_len);
 
     if (send(server_session->socket, message, message_size, 0) < 0)
     {

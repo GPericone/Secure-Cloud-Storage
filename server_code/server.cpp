@@ -27,13 +27,13 @@ void handle_client(int newSd)
 
     if (send_message1(session.get()) == false)
     {
-        log_error("Error in receiving message 0");
+        log_error("Error in receiving message 1");
         return;
     }
 
     if (receive_message2(session.get()) == false)
     {
-        log_error("Error in receiving message 1");
+        log_error("Error in receiving message 2");
         return;
     }
 
@@ -50,13 +50,13 @@ void handle_client(int newSd)
 
     if (send_message3(session.get(), server_private_key) == false)
     {
-        log_error("Error in sending message 2");
+        log_error("Error in sending message 3");
         return;
     }
 
     if (receive_message4(session.get()) == false)
     {
-        log_error("Error in receiving message 3");
+        log_error("Error in receiving message 4");
         return;
     }
 

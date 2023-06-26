@@ -183,9 +183,9 @@ bool receive_message3(Session *client_session)
     }
 
     // Receive the digital to_sign length and deserialize it
-    int to_sign_len;
-    unsigned char *to_sign_len_byte = new unsigned char[sizeof(int)];
-    if (!recv_all(client_session->socket, (void *)to_sign_len_byte, sizeof(int)))
+    long int to_sign_len;
+    unsigned char *to_sign_len_byte = new unsigned char[sizeof(long int)];
+    if (!recv_all(client_session->socket, (void *)to_sign_len_byte, sizeof(long int)))
     {
         log_error("Error receiving to_sign length", true);
         delete_buffers(cert_len_byte, to_sign_len_byte);
@@ -193,6 +193,9 @@ bool receive_message3(Session *client_session)
         return false;
     }
     memcpy(&to_sign_len, to_sign_len_byte, sizeof(int));
+    deserialize_longint(to_sign_len_byte, &to_sign_len);
+
+    std::cout << "to_sign_len: " << to_sign_len << std::endl;
 
     // Receive the digital to_sign
     unsigned char *to_sign = new unsigned char[to_sign_len];
@@ -215,6 +218,8 @@ bool receive_message3(Session *client_session)
         return false;
     }
     memcpy(&signature_len, signature_len_byte, sizeof(int));
+
+    std::cout << "Signature length: " << signature_len << std::endl;
 
     // Receive the signature
     unsigned char *signature = new unsigned char[signature_len];
@@ -385,7 +390,7 @@ bool send_message4(Session *client_session)
     }
 
     // PAYLOAD STRUCTURE: ciphertext | tag | iv
-    size_t message_size = ciphertext_len + TAG_LEN + IV_LEN;
+    size_t message_size = int_to_size_t(ciphertext_len) + TAG_LEN + int_to_size_t(IV_LEN);
 
     // Allocate the message buffer
     unsigned char *message = new unsigned char[message_size];

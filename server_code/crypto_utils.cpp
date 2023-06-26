@@ -495,12 +495,10 @@ EVP_PKEY *duplicate_key(EVP_PKEY *pkey)
     EVP_PKEY *pDupKey = EVP_PKEY_new();
     RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
     RSA *pRSADupKey;
-    printf("START - duplicate_key, EVP_PKEY_get1_RSA, pRSA=%d, pkey=%d", pRSA!=NULL, pkey!=NULL);
     pRSADupKey = RSAPublicKey_dup(pRSA);
 
     RSA_free(pRSA);
     EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
-    printf("START - duplicate_key, EVP_PKEY_set1_RSA, pDupKey=%d, pRSADupKey=%d", pDupKey!=NULL, pRSADupKey!=NULL);
     RSA_free(pRSADupKey);
     return pDupKey;
 }

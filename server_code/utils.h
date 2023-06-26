@@ -130,6 +130,7 @@ void delete_buffers(T *buffer, Ts *...buffers);
 #endif
 
 int safe_size_t_to_int(size_t value);
+size_t int_to_size_t(int value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size);
 bool deserialize_longint(const unsigned char *buffer, long int *result);
