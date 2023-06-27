@@ -161,8 +161,6 @@ bool send_file(Session *session, std::string const &file_path)
         }
         buffer.resize(bytes_to_read);
         input_file.read(&buffer[0], bytes_to_read);
-        printf("buffer=%s\n", buffer.c_str());
-        std::copy(buffer.begin(), buffer.end(), buffer.data());
 
         if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, esito)) // inviare il flag finale solo per l'ultimo chunk
         {
@@ -289,6 +287,113 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
 
     // Clean up and return
     delete_buffers(plaintext, aad, iv, tag, ciphertext, command_len_byte, counter_byte, message);
+    return true;
+}
+
+bool receive_message(Session *session, std::string *payload)
+{
+    return receive_message(session, payload, false, nullptr);
+}
+
+bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
+{
+    // Read the payload length from the socket
+    long int message_len;
+    unsigned char *message_len_byte = new unsigned char[sizeof(long int)];
+    if (!recv_all(session->socket, (void *)message_len_byte, sizeof(long int)))
+    {
+        log_error("Failed to read payload length", true);
+        delete_buffers(message_len_byte);
+        return false;
+    }
+    deserialize_longint(message_len_byte, &message_len);
+    printf("Message length: %ld\n", message_len);
+
+    // Allocate buffers for the ciphertext and plaintext
+    unsigned char *ciphertext = new unsigned char[message_len];
+    unsigned char *plaintext = new unsigned char[message_len];
+
+    // Read the counter from the socket
+    unsigned int counter;
+    unsigned char *counter_byte = new unsigned char[sizeof(int)];
+    if (!recv_all(session->socket, (void *)counter_byte, sizeof(int)))
+    {
+        log_error("Failed to read counter", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
+        return false;
+    }
+    memcpy(&counter, counter_byte, sizeof(int));
+
+    if (counter != session->server_counter)
+    {
+        log_error("Counter mismatch", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
+        return false;
+    }
+
+    session->server_counter++;
+
+    unsigned char *esito_byte = new unsigned char[sizeof(int)];
+    if (receive_esito)
+    {
+        if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
+        {
+            log_error("Failed to read esito", true);
+            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
+            return false;
+        }
+        memcpy(esito, esito_byte, sizeof(int));
+    }
+
+    unsigned int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
+    unsigned char *aad = new unsigned char[aad_len];
+    memcpy(aad, counter_byte, sizeof(int));
+    if (receive_esito)
+    {
+        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
+        delete_buffers(esito_byte);
+    }
+    // Allocate buffers for the tag
+    unsigned char *tag = new unsigned char[TAG_LEN];
+
+    // Receive the ciphertext
+    if (!recv_all(session->socket, (void *)ciphertext, message_len))
+    {
+        log_error("Error receiving ciphertext", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
+        return false;
+    }
+
+    // Receive the tag
+    if (!recv_all(session->socket, (void *)tag, TAG_LEN))
+    {
+        log_error("Error receiving tag", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
+        return false;
+    }
+
+    // Allocate buffers for the IV
+    unsigned char *iv = new unsigned char[IV_LEN];
+
+    // Receive the IV
+    if (!recv_all(session->socket, (void *)iv, IV_LEN))
+    {
+        log_error("Error receiving IV", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
+        return false;
+    }
+
+    // Decrypt the message
+    int plaintext_len = aesgcm_decrypt(ciphertext, longint_to_int(message_len), aad, aad_len, tag, session->aes_key, iv, plaintext);
+    if (plaintext_len < 0)
+    {
+        log_error("Error decrypting message", true);
+        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
+        return false;
+    }
+
+    *payload = std::string(reinterpret_cast<char *>(plaintext), message_len);
+    delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
     return true;
 }
 
@@ -523,111 +628,4 @@ bool RenameClient::execute(Session *session, std::string command)
 bool LogoutClient::execute(Session *session, std::string command)
 {
     return false;
-}
-
-bool receive_message(Session *session, std::string *payload)
-{
-    return receive_message(session, payload, false, nullptr);
-}
-
-bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
-{
-    // Read the payload length from the socket
-    long int message_len;
-    unsigned char *message_len_byte = new unsigned char[sizeof(long int)];
-    if (!recv_all(session->socket, (void *)message_len_byte, sizeof(long int)))
-    {
-        log_error("Failed to read payload length", true);
-        delete_buffers(message_len_byte);
-        return false;
-    }
-    deserialize_longint(message_len_byte, &message_len);
-    printf("Message length: %ld\n", message_len);
-
-    // Allocate buffers for the ciphertext and plaintext
-    unsigned char *ciphertext = new unsigned char[message_len];
-    unsigned char *plaintext = new unsigned char[message_len];
-
-    // Read the counter from the socket
-    unsigned int counter;
-    unsigned char *counter_byte = new unsigned char[sizeof(int)];
-    if (!recv_all(session->socket, (void *)counter_byte, sizeof(int)))
-    {
-        log_error("Failed to read counter", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
-        return false;
-    }
-    memcpy(&counter, counter_byte, sizeof(int));
-
-    if (counter != session->server_counter)
-    {
-        log_error("Counter mismatch", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext);
-        return false;
-    }
-
-    session->server_counter++;
-
-    unsigned char *esito_byte = new unsigned char[sizeof(int)];
-    if (receive_esito)
-    {
-        if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
-        {
-            log_error("Failed to read esito", true);
-            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
-            return false;
-        }
-        memcpy(esito, esito_byte, sizeof(int));
-    }
-
-    unsigned int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
-    unsigned char *aad = new unsigned char[aad_len];
-    memcpy(aad, counter_byte, sizeof(int));
-    if (receive_esito)
-    {
-        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
-        delete_buffers(esito_byte);
-    }
-    // Allocate buffers for the tag
-    unsigned char *tag = new unsigned char[TAG_LEN];
-
-    // Receive the ciphertext
-    if (!recv_all(session->socket, (void *)ciphertext, message_len))
-    {
-        log_error("Error receiving ciphertext", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
-        return false;
-    }
-
-    // Receive the tag
-    if (!recv_all(session->socket, (void *)tag, TAG_LEN))
-    {
-        log_error("Error receiving tag", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag);
-        return false;
-    }
-
-    // Allocate buffers for the IV
-    unsigned char *iv = new unsigned char[IV_LEN];
-
-    // Receive the IV
-    if (!recv_all(session->socket, (void *)iv, IV_LEN))
-    {
-        log_error("Error receiving IV", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
-        return false;
-    }
-
-    // Decrypt the message
-    int plaintext_len = aesgcm_decrypt(ciphertext, longint_to_int(message_len), aad, aad_len, tag, session->aes_key, iv, plaintext);
-    if (plaintext_len < 0)
-    {
-        log_error("Error decrypting message", true);
-        delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
-        return false;
-    }
-
-    *payload = std::string(reinterpret_cast<char *>(plaintext), message_len);
-    delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, aad, tag, iv);
-    return true;
 }

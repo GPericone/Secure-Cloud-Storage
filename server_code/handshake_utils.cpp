@@ -7,6 +7,7 @@ bool send_message1(Session *server_session)
     if (RAND_bytes(nonceS, NONCE_LEN) != 1)
     {
         log_error("Error generating nonce");
+        delete_buffers(nonceS);
         return false;
     }
 
@@ -17,29 +18,19 @@ bool send_message1(Session *server_session)
     if (send(server_session->socket, nonceS, NONCE_LEN, 0) < 0)
     {
         log_error("Error sending message");
+        delete_buffers(nonceS);
         return false;
     }
-    printf("Nonce sent to client\n");
+    std::cout << "Nonce sent to client" << std::endl;
+    delete_buffers(nonceS);
     return true;
 }
 
-/**
- * @brief Receives a message containing the client's username, a nonce, the client's ephemeral public key and a signature of this informations.
- *
- * This function receives a message from the client over the specified socket.
- * The message includes the user's username, a nonce, and the user's ephemeral public key.
- * The message is signed using the user's private key.
- *
- * @param server_session The server's session, containing the socket and where the username, nonce, and ephemeral key will be stored.
- * @param nonce_list The list of nonces, used to prevent replay attacks.
- *
- * @return true on success, false on failure.
- */
 bool receive_message2(Session *server_session)
 {  
     // Read nonce
     unsigned char *nonce = new unsigned char[NONCE_LEN];
-    if ((recv_all(server_session->socket, (void *)nonce, NONCE_LEN)) != NONCE_LEN)
+    if (!recv_all(server_session->socket, (void *)nonce, NONCE_LEN))
     {
         log_error("Failed to receive the nonce");
         delete_buffers(nonce);
@@ -47,9 +38,9 @@ bool receive_message2(Session *server_session)
     }
 
     // Read username length from the socket and deserialize it
-    int user_len;
+    unsigned int user_len;
     unsigned char *username_len_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(server_session->socket, (void *)username_len_byte, sizeof(int))) != sizeof(int))
+    if (!recv_all(server_session->socket, (void *)username_len_byte, sizeof(int)))
     {
         log_error("Failed to read username length");
         delete_buffers(nonce, username_len_byte);
@@ -59,7 +50,7 @@ bool receive_message2(Session *server_session)
 
     // Read username from the socket
     unsigned char *username = new unsigned char[user_len];
-    if ((recv_all(server_session->socket, (void *)username, user_len)) != user_len)
+    if (!recv_all(server_session->socket, (void *)username, user_len))
     {
         log_error("Failed to receive the username");
         delete_buffers(nonce, username_len_byte, username);
@@ -78,9 +69,9 @@ bool receive_message2(Session *server_session)
     }
 
     // Read key length from the socket and deserialize it
-    int key_len;
+    unsigned int key_len;
     unsigned char *key_len_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(server_session->socket, (void *)key_len_byte, sizeof(int))) != sizeof(int))
+    if (!recv_all(server_session->socket, (void *)key_len_byte, sizeof(int)))
     {
         log_error("Failed to read key length");
         delete_buffers(nonce, username_len_byte, username, key_len_byte);
@@ -90,7 +81,7 @@ bool receive_message2(Session *server_session)
 
     // Read serialized ephemeral key from the socket
     unsigned char *serialized_eph_key_pub = new unsigned char[key_len];
-    if ((recv_all(server_session->socket, (void *)serialized_eph_key_pub, key_len)) != key_len)
+    if (!recv_all(server_session->socket, (void *)serialized_eph_key_pub, key_len))
     {
         log_error("Failed to receive the ephemeral key");
         delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub);
@@ -108,7 +99,7 @@ bool receive_message2(Session *server_session)
 
     // receive nonceS
     unsigned char *nonceS = new unsigned char[NONCE_LEN];
-    if ((recv_all(server_session->socket, (void *)nonceS, NONCE_LEN)) != NONCE_LEN)
+    if (!recv_all(server_session->socket, (void *)nonceS, NONCE_LEN))
     {
         log_error("Failed to receive the nonceS");
         delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS);
@@ -126,9 +117,9 @@ bool receive_message2(Session *server_session)
     }
 
     // Read signature length from the socket and deserialize it
-    int signature_len;
+    unsigned int signature_len;
     unsigned char *signature_len_byte = new unsigned char[sizeof(int)];
-    if ((recv_all(server_session->socket, (void *)signature_len_byte, sizeof(int))) != sizeof(int))
+    if (!recv_all(server_session->socket, (void *)signature_len_byte, sizeof(int)))
     {
         log_error("Failed to read signature length");
         delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte);
@@ -139,7 +130,7 @@ bool receive_message2(Session *server_session)
 
     // Read signature from the socket
     unsigned char *signature = new unsigned char[signature_len];
-    if ((recv_all(server_session->socket, (void *)signature, signature_len)) != signature_len)
+    if (!recv_all(server_session->socket, (void *)signature, signature_len))
     {
         log_error("Failed to receive the signature");
         delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature);
@@ -148,7 +139,6 @@ bool receive_message2(Session *server_session)
     }
 
     // Load the client public key in order to verify the signature
-    //TODO: convertire abs_path in stringa
     char abs_path[MAX_PATH];
     getcwd(abs_path, MAX_PATH);
     std::string path = std::string(abs_path) + "/server_file/public_keys/" + username_str + "_public_key.pem";
@@ -187,13 +177,12 @@ bool receive_message2(Session *server_session)
     memcpy(server_session->nonceClient, nonce, NONCE_LEN);
 
     // Print the username of the connected user
-    printf("User %s connected\n", username_str.c_str());
+    std::cout << "User " << username_str << "connected" << std::endl;
     // Add username and ephemeral key to server session
     server_session->username = username_str;
     
-    printf("Username: %s\n", server_session->username.c_str());
+    std::cout << "Username: " << server_session->username << std::endl;
     server_session->eph_key_pub = duplicate_key(eph_key_pub);
-    printf("Ephemeral public key: %s\n", serialized_eph_key_pub);
 
     // Free buffers
     delete_buffers(nonce, username_len_byte, username, key_len_byte, serialized_eph_key_pub, nonceS, signature_len_byte, signature, to_verify);
@@ -202,18 +191,6 @@ bool receive_message2(Session *server_session)
     return true;
 }
 
-/**
- * @brief Sends a message containing the server's certificate, a nonce, a session key and a digital envelope containing the session key.
- *
- * This function sends a message to the client over the specified socket.
- * The message includes the server's certificate, a nonce, a session key and a digital envelope containing the session key.
- * The message is encrypted using the client's ephemeral public key.
- *
- * @param server_session The server's session, containing the socket and the server's ephemeral private key.
- * @param server_private_key The server's private key, used to sign the message.
- *
- * @return true  on success, false on failure.
- */
 bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
 {
     // CERTIFICATE
@@ -225,7 +202,7 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
 
     // Load the certificate
     X509 *certificate = nullptr;
-    if (load_certificate(path, &certificate) != 0)
+    if (!load_certificate(path, &certificate))
     {
         log_error("Failed to load the certificate");
         return false;
@@ -263,7 +240,7 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     // DIGITAL ENVELOPE
     // Allocate buffers for the ciphertext, envelope IV, and encrypted envelope key
     unsigned char *ciphertext;
-    size_t ciphertext_len;
+    int ciphertext_len;
     // Encrypt the session key with the client's public key
     if (!rsaEncrypt(plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm()), server_session->eph_key_pub, ciphertext, ciphertext_len))
     {
@@ -291,7 +268,7 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     // Create the digital signature
     int signature_len = EVP_PKEY_size(server_private_key);
     unsigned char *signature = new unsigned char[signature_len];
-    if (create_digital_signature(server_private_key, to_sign, safe_size_t_to_int(to_sign_len), signature) != signature_len)
+    if (create_digital_signature(server_private_key, to_sign, size_t_to_int(to_sign_len), signature) != signature_len)
     {
         log_error("Failed to create digital signature");
         delete_buffers(cert_len_byte, plaintext, ciphertext, ciphertext_len_byte, to_sign, signature);
@@ -338,13 +315,6 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     return true;
 }
 
-/**
- * @brief Receives an encrypted message from the server using AES-GCM.
- *
- * @param server_session The server's session, containing the socket and the session key.
- *
- * @return true on success, false on failure.
- */
 bool receive_message4(Session *server_session)
 {
     // Allocate buffers for the ciphertext and plaintext
@@ -352,7 +322,7 @@ bool receive_message4(Session *server_session)
     unsigned char *plaintext = new unsigned char[1];
 
     // Receive the ciphertext
-    if (recv_all(server_session->socket, (void *)ciphertext, 1) != 1)
+    if (!recv_all(server_session->socket, (void *)ciphertext, 1))
     {
         log_error("Error receiving ciphertext");
         delete_buffers(ciphertext, plaintext);
@@ -363,7 +333,7 @@ bool receive_message4(Session *server_session)
     unsigned char *tag = new unsigned char[TAG_LEN];
 
     // Receive the tag
-    if (recv_all(server_session->socket, (void *)tag, TAG_LEN) != TAG_LEN)
+    if (!recv_all(server_session->socket, (void *)tag, TAG_LEN))
     {
         log_error("Error receiving tag");
         delete_buffers(ciphertext, plaintext, tag, aad);
@@ -374,7 +344,7 @@ bool receive_message4(Session *server_session)
     unsigned char *iv = new unsigned char[IV_LEN];
 
     // Receive the IV
-    if (recv_all(server_session->socket, (void *)iv, IV_LEN) != (int)IV_LEN)
+    if (!recv_all(server_session->socket, (void *)iv, IV_LEN))
     {
         log_error("Error receiving IV");
         delete_buffers(ciphertext, plaintext, tag, iv, aad);
@@ -382,7 +352,7 @@ bool receive_message4(Session *server_session)
     }
 
     // Decrypt the message
-    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, 0, tag, server_session->aes_key, iv, safe_size_t_to_int(IV_LEN), plaintext);
+    int plaintext_len = aesgcm_decrypt(ciphertext, 1, aad, 0, tag, server_session->aes_key, iv, plaintext);
     if (plaintext_len < 0)
     {
         log_error("Error decrypting message");

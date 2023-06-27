@@ -40,7 +40,7 @@ const int CHUNK_SIZE = 1000000;
 const size_t MAX_PATH = 512;
 const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
-const size_t IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
+const int IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const std::string USERNAMES_FILE = "users.csv";
 const std::regex pattern("[A-Za-z0-9_. -]+");
 
@@ -59,10 +59,6 @@ struct Session
     unsigned int server_counter;
 };
 
-bool send_message(Session *client_session, const std::string payload);
-bool send_message(Session *session, const std::string payload, bool send_esito, int esito);
-bool receive_message(Session *server_session, std::string *payload);
-bool receive_message(Session *server_session, std::string *payload, bool receive_esito, int *esito);
 class CommandServer
 {
 public:
@@ -105,6 +101,12 @@ class LogoutServer : public CommandServer
 public:
     bool execute(Session *session, const std::string command) override;
 };
+
+bool send_message(Session *client_session, const std::string payload);
+bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito);
+bool receive_message(Session *server_session, std::string *payload);
+bool receive_message(Session *server_session, std::string *payload, bool receive_esito, unsigned int *esito);
+
 // USER
 bool isRegistered(std::string username);
 
@@ -129,18 +131,18 @@ void delete_buffers(T *buffer, Ts *...buffers);
 
 #endif
 
-int safe_size_t_to_int(size_t value);
+int size_t_to_int(size_t value);
 size_t int_to_size_t(int value);
 void serialize_int(int input, unsigned char *output);
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size);
 bool deserialize_longint(const unsigned char *buffer, long int *result);
 
-int recv_all(int socket, void *buffer, ssize_t len);
+bool recv_all(int socket, void *buffer, ssize_t len);
 void log_error(const std::string &msg);
 
 // CERTIFICATES
 
-int load_certificate(std::string filename, X509 **certificate);
+bool load_certificate(std::string filename, X509 **certificate);
 
 // ASYMMETRIC KEYS
 
@@ -156,21 +158,22 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 
 // AES-GCM 256
 
-int aesgcm_encrypt(unsigned char *plaintext, int plaintext_len,
-                   unsigned char *aad, int aad_len,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+int aesgcm_encrypt(const unsigned char *plaintext,
+                   int plaintext_len,
+                   const unsigned char *aad, int aad_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *ciphertext,
                    unsigned char *tag);
 
-int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
-                   unsigned char *aad, int aad_len,
+int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
+                   const unsigned char *aad, int aad_len,
                    unsigned char *tag,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *plaintext);
 
-bool rsaEncrypt(const unsigned char* plaintext, size_t plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, size_t& ciphertextLength);
+bool rsaEncrypt(const unsigned char* plaintext, int plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, int& ciphertextLength);
 
 EVP_PKEY* duplicate_key(EVP_PKEY* pkey);
 

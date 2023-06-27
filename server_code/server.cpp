@@ -12,14 +12,6 @@ std::mutex task_mutex;
 // Number of threads in the threadpool
 const int NUM_THREADS = 4;
 
-/**
- * @brief handle_client manages the connection with the client.
- *
- * The function performs the handshake with the client and then manages the connection with the client.
- *
- * @param newSd the socket descriptor of the client
- * @param nonce_list the list of nonces
- */
 void handle_client(int newSd)
 {
     std::unique_ptr<Session> session(new Session());
@@ -83,7 +75,7 @@ void handle_client(int newSd)
             break;
         }
 
-        printf("Comando ricevuto: %s\n", command.c_str());
+        std::cout << "Comando ricevuto: " << command << std::endl;
 
         auto iter = server_command_map.find(command.substr(0, command.find(' ')));
         if (iter != server_command_map.end())
@@ -95,7 +87,7 @@ void handle_client(int newSd)
         }
         else
         {
-            printf("Comando non riconosciuto\n");
+            std::cout << "Comando non riconosciuto" << std::endl;
         }
     }
     session.reset();
@@ -103,13 +95,6 @@ void handle_client(int newSd)
     close(newSd);
 }
 
-/**
- * @brief thread_func is the function executed by each thread of the threadpool.
- *
- * The function waits for a task to be added to the task queue and then executes it.
- *
- * @param nonce_list the list of nonces
- */
 void thread_func()
 {
     while (true)
@@ -137,7 +122,7 @@ int main(int argc, char **argv)
 {
     struct sockaddr_in myAddr, clAddr;
     socklen_t len;
-    int sd, ret, newSd;
+    int sd, newSd;
     unsigned short int port = 4242;
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
@@ -152,12 +137,10 @@ int main(int argc, char **argv)
     myAddr.sin_port = htons(port);
     myAddr.sin_addr.s_addr = INADDR_ANY;
 
-    ret = bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr));
-    if (ret < 0)
+    if (bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr)) < 0)
         exit(-1);
 
-    ret = listen(sd, 10);
-    if (ret < 0)
+    if (listen(sd, 10) < 0)
         exit(-1);
 
     std::vector<std::thread> threads;

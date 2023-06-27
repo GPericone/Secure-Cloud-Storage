@@ -4,30 +4,23 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
-/**
- * @brief Loads a certificate from the specified PEM file.
- *
- * @param filename the name of the file containing the certificate
- * @param certificate pointer to the certificate object to be loaded
- * @return int 0 if successful, -1 otherwise
- */
-int load_certificate(std::string filename, X509 **certificate)
+bool load_certificate(std::string filename, X509 **certificate)
 {
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
-        std::cerr << "An error occurred while opening the file" << std::endl;
-        return -1;
+        log_error("An error occurred while opening the file");
+        return false;
     }
-    *certificate = PEM_read_X509(fp, NULL, NULL, NULL);
+    *certificate = PEM_read_X509(fp, nullptr, nullptr, nullptr);
     if (!certificate)
     {
-        std::cerr << "An error occurred while reading the certificate" << std::endl;
+        log_error("An error occurred while reading the certificate");
         fclose(fp);
-        return -1;
+        return false;
     }
     fclose(fp);
-    return 0;
+    return true;
 }
 
 // --------------------------------------------------------------------------
@@ -45,7 +38,7 @@ EVP_PKEY *load_public_key(const char *public_key_file)
     FILE *pub_key_file = fopen(public_key_file, "r");
     if (!pub_key_file)
     {
-        std::cerr << "Error opening public key file: " << public_key_file << std::endl;
+        log_error("Error opening public key file");
         return nullptr;
     }
 
@@ -54,7 +47,7 @@ EVP_PKEY *load_public_key(const char *public_key_file)
 
     if (!public_key)
     {
-        std::cerr << "Error reading public key from file: " << public_key_file << std::endl;
+        log_error("Error reading public key from file");
     }
 
     return public_key;
@@ -72,16 +65,16 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     FILE *priv_key_file = fopen(private_key_file, "r");
     if (!priv_key_file)
     {
-        std::cerr << "Error opening private key file: " << private_key_file << std::endl;
+        log_error("Error opening private key file");
         return nullptr;
     }
 
     // Read the private key from the file
-    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, (void *)"password");
+    EVP_PKEY *private_key = PEM_read_PrivateKey(priv_key_file, nullptr, nullptr, nullptr);
 
     if (!private_key)
     {
-        std::cerr << "Error reading private key from file: " << private_key_file << std::endl;
+        log_error("Error reading private key from file");
         fclose(priv_key_file);
         return nullptr;
     }
@@ -108,13 +101,13 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
     BIO *bio = BIO_new(BIO_s_mem());
     if (!bio)
     {
-        std::cerr << "Error during BIO creation" << std::endl;
+        log_error("Error during BIO creation");
         return -1;
     }
 
     if (!PEM_write_bio_PUBKEY(bio, public_key))
     {
-        std::cerr << "Error during PEM_write_bio_PUBKEY" << std::endl;
+        log_error("Error during PEM_write_bio_PUBKEY");
         BIO_free_all(bio);
         return -1;
     }
@@ -124,7 +117,7 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 
     if (BIO_read(bio, *serialized_key, key_len) != key_len)
     {
-        std::cerr << "Error during BIO_read" << std::endl;
+        log_error("Error during BIO_read");
         BIO_free_all(bio);
         delete[] *serialized_key;
         return -1;
@@ -151,13 +144,13 @@ EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len)
     BIO *bio = BIO_new(BIO_s_mem());
     if (!bio)
     {
-        std::cerr << "Error during BIO creation" << std::endl;
+        log_error("Error during BIO creation");
         return nullptr;
     }
 
     if (BIO_write(bio, serialized_key, key_len) != key_len)
     {
-        std::cerr << "Error during BIO_write" << std::endl;
+        log_error("Error during BIO_write");
         BIO_free_all(bio);
         return nullptr;
     }
@@ -165,7 +158,7 @@ EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len)
     EVP_PKEY *public_key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
     if (!public_key)
     {
-        std::cerr << "Error during PEM_read_bio_PUBKEY" << std::endl;
+        log_error("Error during PEM_read_bio_PUBKEY");
         BIO_free_all(bio);
         return nullptr;
     }
@@ -277,7 +270,7 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     ret = EVP_VerifyFinal(ctx, signature, signature_len, public_key);
     if (ret != 1)
     {
-        std::cerr << ERR_error_string(ERR_get_error(), NULL) << std::endl;
+        log_error(ERR_error_string(ERR_get_error(), nullptr));
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -293,25 +286,11 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 // The cipher to be used for encryption and decryption
 const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
-/**
- * Encrypts the plaintext using the AES-GCM encryption algorithm and returns the ciphertext and tag.
- *
- * @param plaintext The plaintext to be encrypted.
- * @param plaintext_len The length of the plaintext.
- * @param aad The additional authentication data (AAD) to be included in the encryption.
- * @param aad_len The length of the AAD.
- * @param key The encryption key.
- * @param iv The initialization vector (IV).
- * @param iv_len The length of the IV.
- * @param ciphertext The buffer where the ciphertext will be written.
- * @param tag The buffer where the authentication tag will be written.
- * @return The length of the ciphertext on success, or -1 on error.
- */
-int aesgcm_encrypt(unsigned char *plaintext,
+int aesgcm_encrypt(const unsigned char *plaintext,
                    int plaintext_len,
-                   unsigned char *aad, int aad_len,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+                   const unsigned char *aad, int aad_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *ciphertext,
                    unsigned char *tag)
 {
@@ -323,29 +302,29 @@ int aesgcm_encrypt(unsigned char *plaintext,
     // Create and initialise the context
     ctx = EVP_CIPHER_CTX_new();
 
-    if (ctx == NULL)
+    if (ctx == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        log_error("An error occurred during the creation of the context");
         return -1;
     }
 
     // Initialise the encryption operation.
     if (1 != EVP_EncryptInit(ctx, cipher, key, iv))
     {
-        std::cerr << "An error occurred during the initialization of the encryption" << std::endl;
+        log_error("An error occurred during the initialization of the encryption");
         return -1;
     }
 
     // Provide any AAD data. This can be called zero or more times as required
-    if (1 != EVP_EncryptUpdate(ctx, NULL, &len, aad, aad_len))
+    if (1 != EVP_EncryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
-        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        log_error("An error occurred during the provision of AAD data");
         return -1;
     }
 
     if (1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
     {
-        std::cerr << "An error occurred during the update of the encryption" << std::endl;
+        log_error("An error occurred during the update of the encryption");
         return -1;
     }
 
@@ -354,7 +333,7 @@ int aesgcm_encrypt(unsigned char *plaintext,
     // Finalize Encryption
     if (1 != EVP_EncryptFinal(ctx, ciphertext + len, &len))
     {
-        std::cerr << "An error occurred during the finalization of the encryption" << std::endl;
+        log_error("An error occurred during the finalization of the encryption");
         return -1;
     }
 
@@ -363,7 +342,7 @@ int aesgcm_encrypt(unsigned char *plaintext,
     // Get the tag
     if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
     {
-        std::cerr << "An error occurred while getting the tag" << std::endl;
+        log_error("An error occurred while getting the tag");
         return -1;
     }
 
@@ -371,30 +350,12 @@ int aesgcm_encrypt(unsigned char *plaintext,
 
     return ciphertext_len;
 }
-/**
- * @brief Decrypts an AES-GCM ciphertext and verifies its authenticity.
- *
- * This function decrypts an AES-GCM encrypted ciphertext using the provided key, IV, and
- * authentication tag. It also processes additional authenticated data (AAD) if provided.
- * The function uses the EVP_Decrypt* family of functions from the OpenSSL library for decryption.
- *
- * @param ciphertext    Pointer to the unsigned char array containing the ciphertext to be decrypted.
- * @param ciphertext_len Integer representing the length of the ciphertext in bytes.
- * @param aad           Pointer to the unsigned char array containing the additional authenticated data (AAD).
- * @param aad_len       Integer representing the length of the AAD in bytes.
- * @param tag           Pointer to the unsigned char array containing the authentication tag.
- * @param key           Pointer to the unsigned char array containing the decryption key.
- * @param iv            Pointer to the unsigned char array containing the initialization vector (IV).
- * @param iv_len        Integer representing the length of the IV in bytes.
- * @param plaintext     Pointer to the unsigned char array where the decrypted plaintext will be stored.
- *
- * @return              Integer representing the length of the decrypted plaintext in bytes, or -1 in case of errors or authentication failure.
- */
-int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
-                   unsigned char *aad, int aad_len,
+
+int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
+                   const unsigned char *aad, int aad_len,
                    unsigned char *tag,
-                   unsigned char *key,
-                   unsigned char *iv, int iv_len,
+                   const unsigned char *key,
+                   const unsigned char *iv,
                    unsigned char *plaintext)
 {
     EVP_CIPHER_CTX *ctx;
@@ -405,29 +366,29 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     /* Create and initialise the context */
     ctx = EVP_CIPHER_CTX_new();
 
-    if (ctx == NULL)
+    if (ctx == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        log_error("An error occurred during the creation of the context");
         return -1;
     }
 
     if (!EVP_DecryptInit(ctx, cipher, key, iv))
     {
-        std::cerr << "An error occurred during the initialization of the decryption" << std::endl;
+        log_error("An error occurred during the initialization of the decryption");
         return -1;
     }
 
     // Provide any AAD data.
-    if (!EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len))
+    if (!EVP_DecryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
-        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        log_error("An error occurred during the provision of AAD data");
         return -1;
     }
 
     // Provide the message to be decrypted, and obtain the plaintext output.
     if (!EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
     {
-        std::cerr << "An error occurred during the update of the decryption" << std::endl;
+        log_error("An error occurred during the update of the decryption");
         return -1;
     }
 
@@ -436,7 +397,7 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     /* Set expected tag value. */
     if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag))
     {
-        std::cerr << "An error occurred while getting the tag" << std::endl;
+        log_error("An error occurred while getting the tag");
         return -1;
     }
     /*
@@ -461,29 +422,25 @@ int aesgcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
     }
 }
 
-bool rsaEncrypt(const unsigned char *plaintext, size_t plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, size_t &ciphertextLength)
+bool rsaEncrypt(const unsigned char *plaintext, int plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, int &ciphertextLength)
 {
     RSA *rsaKey = EVP_PKEY_get1_RSA(publicKey);
     if (!rsaKey)
     {
-        std::cerr << "Error extracting RSA key from EVP_PKEY." << std::endl;
+        log_error("Error extracting RSA key from EVP_PKEY.");
         return false;
     }
 
-    int rsaKeySize = RSA_size(rsaKey);
-    ciphertext = new unsigned char[rsaKeySize];
+    ciphertext = new unsigned char[RSA_size(rsaKey)];
 
-    int result = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_OAEP_PADDING);
-    if (result == -1)
+    ciphertextLength = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_OAEP_PADDING);
+    if (ciphertextLength == -1)
     {
-        std::cerr << "Error encrypting with RSA." << std::endl;
+        log_error("Error encrypting with RSA.");
         ERR_print_errors_fp(stderr);
         RSA_free(rsaKey);
-        delete[] ciphertext;
         return false;
     }
-
-    ciphertextLength = result;
 
     RSA_free(rsaKey);
 

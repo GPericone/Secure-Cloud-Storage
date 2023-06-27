@@ -345,7 +345,7 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
     ret = EVP_VerifyFinal(ctx, signature, signature_len, public_key);
     if (ret != 1)
     {
-        std::cerr << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
+        log_error(ERR_error_string(ERR_get_error(), nullptr), true);
         EVP_MD_CTX_free(ctx);
         return -1;
     }
@@ -502,7 +502,7 @@ bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PK
     RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
     if (!rsaKey)
     {
-        std::cerr << "Error getting RSA key from EVP_PKEY." << std::endl;
+        log_error("Error getting RSA key from EVP_PKEY.", true);
         return false;
     }
 
