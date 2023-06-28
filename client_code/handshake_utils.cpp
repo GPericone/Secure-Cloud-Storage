@@ -2,7 +2,7 @@
 
 /**
  * @brief The client receives the server's nonce
- * 
+ *
  * @param client_session the client's session struct
  * @return true if the message is received correctly, false otherwise
  */
@@ -10,19 +10,32 @@ bool receive_message1(Session *client_session)
 {
     // Allocate memory for the server's nonce
     unsigned char *nonceS = new unsigned char[NONCE_LEN];
+
     // Receive the nonce from the server
     if (!recv_all(client_session->socket, nonceS, NONCE_LEN))
     {
+        // If the receive operation fails, log an error message and return false
         log_error("Error receiving message", true);
         return false;
-    }   
+    }
 
     // Copy the server's nonce into the client's session
     memcpy(client_session->nonceServer, nonceS, NONCE_LEN);
+
+    // Print a message indicating that the nonce has been received
     printf("Nonce received from server\n");
+
+    // Return true to indicate that the operation was successful
     return true;
 }
 
+/**
+ * @brief The client sends its username, its nonce and ephemeral public key to the server.
+ * It also signs the message with its private key.
+ *
+ * @param client_session the client's session struct
+ * @return true if the message is sent correctly, false otherwise
+ */
 bool send_message2(Session *client_session)
 {
     // Prompt the user for their username
@@ -30,7 +43,8 @@ bool send_message2(Session *client_session)
     std::cout << "Enter your username" << std::endl;
     std::cin >> username;
 
-    // Check username
+    // Check username length and format
+    // The username must be between 1 and USERNAME_SIZE characters long and must contain only alphabetical characters
     if (username.empty() || username.size() > USERNAMESIZE || !std::regex_match(username, username_pattern))
     {
         log_error("Invalid username", false);
@@ -38,7 +52,7 @@ bool send_message2(Session *client_session)
     }
     // Load the client private key
     char abs_path[MAX_PATH];
-    if(!getcwd(abs_path, MAX_PATH))
+    if (!getcwd(abs_path, MAX_PATH))
     {
         log_error("Error getting current working directory", true);
         return false;
@@ -64,6 +78,7 @@ bool send_message2(Session *client_session)
 
     // Serialize the username length
     unsigned char *username_len_byte = new unsigned char[sizeof(int)];
+    // We can safely cast the username size to int because we already checked that it is between 1 and USERNAME_SIZE
     serialize_int(size_t_to_int(username.size()), username_len_byte);
 
     // Add username and ephemeral keys to client session
@@ -86,7 +101,9 @@ bool send_message2(Session *client_session)
     memcpy(client_session->nonceClient, nonce, NONCE_LEN);
 
     // Serialize the ephemeral public key
+    // We give the buffer a size of 2048 bytes because the serialized key can be up to 2048 bytes long
     unsigned char *serialized_eph_key_pub = new unsigned char[2048];
+    // The real dimension of the serialized key is returned by the function
     int key_len = serialize_public_key(eph_key_pub, &serialized_eph_key_pub);
 
     // Calculate signature length and allocate the buffer
@@ -102,7 +119,7 @@ bool send_message2(Session *client_session)
     serialize_int(key_len, key_len_byte);
 
     // Copy nonce, username, key length and ephemeral public key into the buffer to sign
-    // to_sign: nonce | username_len | username | key_len | ephemeral_key | nonceS
+    // TO_SIGN: nonce | username_len | username | key_len | ephemeral_key | nonceS
     memcpy(to_sign, nonce, NONCE_LEN);
     memcpy(to_sign + NONCE_LEN, username_len_byte, sizeof(int));
     memcpy(to_sign + NONCE_LEN + sizeof(int), username.c_str(), username.size());
@@ -125,10 +142,12 @@ bool send_message2(Session *client_session)
     unsigned char *signature_len_byte = new unsigned char[sizeof(int)];
     serialize_int(signature_len, signature_len_byte);
 
-    // Calculate payload size
+    // Calculate message size
     size_t message_size = to_sign_len + sizeof(int) + int_to_size_t(signature_len);
     unsigned char *message = new unsigned char[message_size];
 
+    // Create the message
+    // MESSAGE: to_sign | signature_len | signature
     memcpy(message, to_sign, to_sign_len);
     memcpy(message + to_sign_len, signature_len_byte, sizeof(int));
     memcpy(message + to_sign_len + sizeof(int), signature, signature_len);
@@ -152,6 +171,13 @@ bool send_message2(Session *client_session)
     return true;
 }
 
+/**
+ * @brief The client receives the certificate, the session key encrypted with its public ephemeral key and the nonceClient that was sent to the server.
+ * The session key encrypted and the nonceClient are signed with the server's private key.
+ *
+ * @param client_session the client's session struct
+ * @return true if the message is received correctly, false otherwise
+ */
 bool receive_message3(Session *client_session)
 {
     // Receive the certificate length and deserialize it
@@ -195,8 +221,6 @@ bool receive_message3(Session *client_session)
     memcpy(&to_sign_len, to_sign_len_byte, sizeof(int));
     deserialize_longint(to_sign_len_byte, &to_sign_len);
 
-    std::cout << "to_sign_len: " << to_sign_len << std::endl;
-
     // Receive the digital to_sign
     unsigned char *to_sign = new unsigned char[to_sign_len];
     if (!recv_all(client_session->socket, (void *)to_sign, to_sign_len))
@@ -218,8 +242,6 @@ bool receive_message3(Session *client_session)
         return false;
     }
     memcpy(&signature_len, signature_len_byte, sizeof(int));
-
-    std::cout << "Signature length: " << signature_len << std::endl;
 
     // Receive the signature
     unsigned char *signature = new unsigned char[signature_len];
@@ -246,6 +268,7 @@ bool receive_message3(Session *client_session)
         return false;
     }
 
+    // Load the CA certificate and CRL
     std::string CA_cert_path = std::string(abs_path) + "/client_file/CA/cert.pem";
     std::string CRL_path = std::string(abs_path) + "/client_file/CA/crl.pem";
     if (!load_certificate(CA_cert_path, &CA_certificate) || !load_crl(CRL_path, &crl))
@@ -359,11 +382,19 @@ bool receive_message3(Session *client_session)
     return true;
 }
 
+/**
+ * @brief The client sends a message to the server using the session key, so that the server can verify that the client has the session key.
+ * The client encrypt a dummy byte using AES-GCM and sends the ciphertext, the IV, and the tag to the server.
+ *
+ * @param client_session the client's session struct
+ * @return true if the message is sent correctly, false otherwise
+ */
 bool send_message4(Session *client_session)
 {
 
     // Allocate buffers for the plaintext, AAD, IV, tag, and ciphertext
     unsigned char *plaintext = new unsigned char[1];
+    // We don't use AAD in this case
     unsigned char *aad = new unsigned char[0];
     unsigned char *iv = new unsigned char[IV_LEN];
     unsigned char *tag = new unsigned char[TAG_LEN];
@@ -389,7 +420,7 @@ bool send_message4(Session *client_session)
         return false;
     }
 
-    // PAYLOAD STRUCTURE: ciphertext | tag | iv
+    // MESSAGE STRUCTURE: ciphertext | tag | iv
     size_t message_size = int_to_size_t(ciphertext_len) + TAG_LEN + int_to_size_t(IV_LEN);
 
     // Allocate the message buffer

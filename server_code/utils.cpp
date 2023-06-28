@@ -334,7 +334,6 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
         return false;
     }
     deserialize_longint(message_len_byte, &message_len);
-    std::cout << "Message length: " << message_len << std::endl;
 
     // Allocate buffers for the ciphertext and plaintext
     unsigned char *ciphertext = new unsigned char[message_len];
@@ -550,7 +549,7 @@ bool check_availability_to_download(std::string const &path, std::string *respon
         *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
         return false;
     }
-    *response = "Il file esiste," + path + " ha una dimensione di " + get_file_size(path) + " sei sicuro di voler effettuare il download? (s/n)";
+    *response = "Il file esiste, ha una dimensione di " + get_file_size(path) + " sei sicuro di voler effettuare il download? (s/n)";
     return true;
 }
 
@@ -629,7 +628,7 @@ bool check_file_existance(std::string const &path, std::string *response)
     }
     else
     {
-        *response = "Il file esiste, sei sicuro di voler eliminare " + path + "? (s/n)";
+        *response = "Il file esiste, sei sicuro di volerlo eliminare? (s/n)";
         return true;
     }
 }
@@ -638,7 +637,7 @@ std::string delete_file(std::string const &path)
 {
     if (std::remove(path.c_str()) == 0)
     {
-        return "File " + path + " eliminato con successo\n";
+        return "File eliminato con successo\n";
     }
     return "File non trovato";
 }
@@ -755,18 +754,18 @@ std::string rename_file(std::string const &old_file_name, std::string const &new
 
     if (!std::ifstream(old_file_name))
     {
-        return "File con nome " + old_file_name + " non esistente";
+        return "File da rinominare non esistente";
     }
 
     // check esistenza file con nome newFilePath
     if (std::ifstream(new_file_name))
     {
-        return "File con nome " + new_file_name + " già esistente";
+        return "Nuovo nome già presente";
     }
 
     if (rename(old_file_name.c_str(), new_file_name.c_str()) == 0)
     {
-        return "File " + old_file_name + " rinominato in " + new_file_name;
+        return "File rinominato correttamente";
     }
     return "Errore nella rinomina del file";
 }

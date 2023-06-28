@@ -7,10 +7,10 @@ int main(int argc, char **argv)
     const unsigned short int server_port = 4242;
     int sd;
 
-    // Verifica che ci sia almeno un argomento
+    // Check that there is at least one argument
     if (argc >= 2)
     {
-        // Verifica che l'argomento sia un indirizzo IP valido
+        // Check if the argument is a valid IP address
         struct in_addr addr;
         if (inet_pton(AF_INET, argv[1], &addr) == 1)
         {
@@ -23,12 +23,12 @@ int main(int argc, char **argv)
         }
     }
 
-    // Verifica che ci sia almeno un terzo argomento e che sia "-d"
+    // Check if there is a second argument
     if (argc >= 3)
     {
+        // Check if the argument is -d (debug mode)
         if (strcmp(argv[2], "-d") == 0)
         {
-            // Imposta DEBUG_MODE su true
             DEBUG_MODE = true;
         }
         else
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // Effettuo l'handshake con il server
+    // The client does the handshake with the server
     std::unique_ptr<Session> session(new Session());
     session->socket = sd;
 
@@ -91,8 +91,8 @@ int main(int argc, char **argv)
     EVP_PKEY_free(session->eph_key_pub);
     EVP_PKEY_free(session->eph_key_priv);
 
+    // Map of commands
     std::map<std::string, std::unique_ptr<CommandClient>> client_command_map;
-    
     client_command_map["upload"].reset(new UploadClient());
     client_command_map["download"].reset(new DownloadClient());
     client_command_map["delete"].reset(new DeleteClient());
@@ -100,25 +100,25 @@ int main(int argc, char **argv)
     client_command_map["rename"].reset(new RenameClient());
     client_command_map["logout"].reset(new LogoutClient());
 
-    // Invio e ricezione messaggi con il server
+    // Print the instructions
     std::cout << instruction << std::endl;
 
     while (true)
     {
-        // Leggo il messaggio da tastiera
+        // Read the input from the user
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
         std::string command;
         std::cout << "> ";
-        // Elimina eventuali errori di sincronizzazione
+        // Delete eventual sync problems
         std::cin.sync();
-        // Legge l'intera riga di input
+        // Read the command from the user and store it in the string command
         std::getline(std::cin, command);
         std::cout << std::endl;
 
-        std::cout << "Il comando inserito è: " << command << std::endl;
+        std::cout << "The command entered is: " << command << std::endl;
 
-        // Cerca il comando nella mappa
+        // Search the command in the map
         auto iter = client_command_map.find(command.substr(0, command.find(' ')));
         if (iter != client_command_map.end())
         {
@@ -134,12 +134,12 @@ int main(int argc, char **argv)
         }
         else
         {
-            std::cout << "Comando non riconosciuto" << std::endl;
+            std::cerr << "Command not recognized" << std::endl;
         }
-        std::cout << "Operazione conclusa con successo, premi INVIO per continuare..." << std::endl;
+        std::cout << "Operation completed successfully, press ENTER to continue..." << std::endl;
     }
 
-    // Chiudo la connessione con il server
+    // Close the connection with the server
     client_command_map.clear();
     session.reset();
     close(sd);

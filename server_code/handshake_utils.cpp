@@ -1,8 +1,14 @@
 #include "utils.h"
 
+/**
+ * @brief Server sends a nonce to the client
+ * 
+ * @param server_session server's session struct
+ * @return true if the message is sent correctly, false otherwise
+ */
 bool send_message1(Session *server_session)
 {
-    // genera il nonce del server e lo invia
+    // Generate nonce
     unsigned char *nonceS = new unsigned char[NONCE_LEN];
     if (RAND_bytes(nonceS, NONCE_LEN) != 1)
     {
@@ -26,6 +32,14 @@ bool send_message1(Session *server_session)
     return true;
 }
 
+/**
+ * @brief Server receives a nonce, a username and an ephemeral key from the client.
+ * It checks if the user is registered, if the nonce is correct and if the ephemeral key is valid.
+ * All the informations are signed by the client. The server verifies the signature.
+ * 
+ * @param server_session server's session struct
+ * @return true if the message is received correctly, false otherwise
+ */
 bool receive_message2(Session *server_session)
 {  
     // Read nonce
@@ -156,6 +170,7 @@ bool receive_message2(Session *server_session)
     unsigned char *to_verify = new unsigned char[to_verify_len];
 
     // Copy nonce, username, key length and ephemeral public key into the buffer to verify
+    // TO_VERIFY: nonce | username_len | username | key_len | ephemeral_key | nonceS
     memcpy(to_verify, nonce, NONCE_LEN);
     memcpy(to_verify + NONCE_LEN, username_len_byte, sizeof(int));
     memcpy(to_verify + NONCE_LEN + sizeof(int), username, user_len);
@@ -191,6 +206,14 @@ bool receive_message2(Session *server_session)
     return true;
 }
 
+/**
+ * @brief The server sends the certificate, generates a session key and sends it encrypted with the ephemeral client public key.
+ * The server also signs the encrypted session key and the nonceClient and sends the signature to the client.
+ * 
+ * @param server_session server's session struct
+ * @param server_private_key server's private key
+ * @return true if the message has been sent successfully, false otherwise
+ */
 bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
 {
     // CERTIFICATE
@@ -237,7 +260,6 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     // Add session key to server session
     memcpy(server_session->aes_key, plaintext, EVP_CIPHER_key_length(EVP_aes_256_gcm()));
 
-    // DIGITAL ENVELOPE
     // Allocate buffers for the ciphertext, envelope IV, and encrypted envelope key
     unsigned char *ciphertext;
     int ciphertext_len;
@@ -315,6 +337,12 @@ bool send_message3(Session *server_session, EVP_PKEY *server_private_key)
     return true;
 }
 
+/**
+ * @brief The server receives the dummy byte encrypted with the session key and checks if it is correct using the tag
+ * 
+ * @param server_session the server's session struct
+ * @return true if the message was received and decrypted successfully, false otherwise
+ */
 bool receive_message4(Session *server_session)
 {
     // Allocate buffers for the ciphertext and plaintext

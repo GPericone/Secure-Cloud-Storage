@@ -4,6 +4,13 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
+/**
+ * @brief Load a certificate from a file
+ * 
+ * @param filename the name of the file containing the certificate
+ * @param certificate the certificate where to store the loaded certificate
+ * @return true if the certificate was loaded successfully, false otherwise
+ */
 bool load_certificate(std::string filename, X509 **certificate)
 {
     FILE *fp = fopen(filename.c_str(), "r");
@@ -23,6 +30,13 @@ bool load_certificate(std::string filename, X509 **certificate)
     return true;
 }
 
+/**
+ * @brief Load a CRL from a file
+ * 
+ * @param filename the name of the file containing the CRL
+ * @param crl the CRL where to store the loaded CRL
+ * @return true if the CRL was loaded successfully, false otherwise
+ */
 bool load_crl(std::string filename, X509_CRL **crl)
 {
     FILE *fp = fopen(filename.c_str(), "r");
@@ -42,6 +56,14 @@ bool load_crl(std::string filename, X509_CRL **crl)
     return true;
 }
 
+/**
+ * @brief Create a store object and add the CA certificate and the CRL to it
+ * 
+ * @param store the X509_STORE where to store the loaded store
+ * @param CA_certificate the CA certificate to add to the store
+ * @param crl the CRL to add to the store  
+ * @return true if the store was created successfully, false otherwise
+ */
 bool create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
 {
     // Allocate an empty store, returning NULL if an error occurred
@@ -76,6 +98,13 @@ bool create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
     return true;
 }
 
+/**
+ * @brief Verify a certificate using the store
+ * 
+ * @param store the store to use for the verification
+ * @param certificate the certificate to verify
+ * @return true if the certificate was verified successfully, false otherwise
+ */
 bool verify_certificate(X509_STORE *store, X509 *certificate)
 {
     // Allocate a new context for certificate verification, returns the allocated context or NULL if an error occurs
@@ -118,13 +147,19 @@ bool verify_certificate(X509_STORE *store, X509 *certificate)
 // ASYMMETRIC KEYS
 // --------------------------------------------------------------------------
 
+/**
+ * @brief Load a private key from a file
+ * 
+ * @param private_key_file the name of the file containing the private key
+ * @return EVP_PKEY* the private key loaded from the file
+ */
 EVP_PKEY *load_private_key(const char *private_key_file)
 {
     // Open the file
     FILE *priv_key_file = fopen(private_key_file, "r");
     if (!priv_key_file)
     {
-        std::cerr << "Error opening private key file: " << private_key_file << std::endl;
+        log_error("Error opening private key file", true);
         return nullptr;
     }
 
@@ -133,7 +168,6 @@ EVP_PKEY *load_private_key(const char *private_key_file)
 
     if (!private_key)
     {
-        std::cerr << "Error reading private key from file: " << private_key_file << std::endl;
         fclose(priv_key_file);
         return nullptr;
     }
@@ -144,6 +178,13 @@ EVP_PKEY *load_private_key(const char *private_key_file)
     return private_key;
 }
 
+/**
+ * @brief Generate a new RSA key pair
+ * 
+ * @param k_priv the EVP_PKEY where to store the private key
+ * @param k_pub the EVP_PKEY where to store the public key
+ * @return true if the key pair was generated successfully, false otherwise
+ */
 bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
 {
     // Inialize the variables
@@ -153,91 +194,130 @@ bool generateEphKeys(EVP_PKEY **k_priv, EVP_PKEY **k_pub)
     BIO *bio_pub = nullptr;
 
     // Generate RSA key
-    big_num = BN_new(); // Create a new BIGNUM instance to hold the RSA public exponent.
+    // Create a new BIGNUM instance to hold the RSA public exponent.
+    big_num = BN_new();
     if (big_num == nullptr)
     {
-        return false; // Return false if BIGNUM creation fails.
+        // Return false if BIGNUM creation fails.
+        return false; 
     }
 
     // Set the exponent
-    if (BN_set_word(big_num, RSA_F4) != 1) // Set the value of BIGNUM to RSA_F4 (0x10001, or 65537).
+    // Set the value of BIGNUM to RSA_F4 (0x10001, or 65537).
+    if (BN_set_word(big_num, RSA_F4) != 1)
     {
-        BN_free(big_num); // Free the BIGNUM if setting the value fails.
-        return false;     // Return false if setting the value fails.
+        // Free the BIGNUM if setting the value fails.
+        BN_free(big_num);
+        // Return false if setting the value fails.
+        return false;
     }
-    rsa = RSA_new(); // Create a new RSA structure.
+    // Create a new RSA structure.
+    rsa = RSA_new();
     if (rsa == nullptr)
     {
-        BN_free(big_num); // Free the BIGNUM if RSA creation fails.
-        return false;     // Return false if RSA creation fails.
+        // Free the BIGNUM if RSA creation fails.
+        BN_free(big_num);
+        // Return false if RSA creation fails.
+        return false;    
     }
 
     // Generate an RSA key pair with a length of 2048 bits.
     if (RSA_generate_key_ex(rsa, 2048, big_num, nullptr) != 1)
     {
-        BN_free(big_num); // Free the BIGNUM if RSA key pair generation fails.
-        RSA_free(rsa);    // Free the RSA structure if RSA key pair generation fails.
-        return false;     // Return false if RSA key pair generation fails.
+        // Free the BIGNUM if RSA key pair generation fails.
+        BN_free(big_num);
+        // Free the RSA structure if RSA key pair generation fails.
+        RSA_free(rsa);   
+        // Return false if RSA key pair generation fails.
+        return false;    
     }
 
-    BN_free(big_num); // Free the BIGNUM now as it's no longer needed.
+    // Free the BIGNUM now as it's no longer needed.
+    BN_free(big_num);
 
     // Extract the private key
-    bio = BIO_new(BIO_s_mem()); // Create a new BIO for input/output operations.
+    // Create a new BIO for input/output operations.
+    bio = BIO_new(BIO_s_mem());
     if (bio == nullptr)
     {
-        RSA_free(rsa); // Free the RSA structure if BIO creation fails.
-        return false;  // Return false if BIO creation fails.
+        // Free the RSA structure if BIO creation fails.
+        RSA_free(rsa);
+        // Return false if BIO creation fails.
+        return false;  
     }
 
     // Write the RSA private key to the BIO.
     if (PEM_write_bio_RSAPrivateKey(bio, rsa, nullptr, nullptr, 0, nullptr, nullptr) != 1)
     {
-        BIO_free_all(bio); // Free the BIO if writing the private key fails.
-        RSA_free(rsa);     // Free the RSA structure if writing the private key fails.
-        return false;      // Return false if writing the private key fails.
+        // Free the BIO if writing the private key fails.
+        BIO_free_all(bio);
+        // Free the RSA structure if writing the private key fails.
+        RSA_free(rsa);
+        // Return false if writing the private key fails.     
+        return false;      
     }
 
     // Read the private key from the BIO into the k_priv pointer.
     if (PEM_read_bio_PrivateKey(bio, k_priv, nullptr, nullptr) != *k_priv)
     {
-        BIO_free_all(bio); // Free the BIO if reading the private key fails.
-        RSA_free(rsa);     // Free the RSA structure if reading the private key fails.
-        return false;      // Return false if reading the private key fails.
+        // Free the BIO if reading the private key fails.
+        BIO_free_all(bio); 
+        // Free the RSA structure if reading the private key fails.
+        RSA_free(rsa);    
+        // Return false if reading the private key fails. 
+        return false;      
     }
 
-    BIO_free_all(bio); // Free the BIO now as it's no longer needed.
+    // Free the BIO now as it's no longer needed.
+    BIO_free_all(bio);
 
     // Extract the public key
-    bio_pub = BIO_new(BIO_s_mem()); // Create a new BIO for input/output operations.
+    // Create a new BIO for input/output operations.
+    bio_pub = BIO_new(BIO_s_mem()); 
     if (bio_pub == nullptr)
     {
-        RSA_free(rsa); // Free the RSA structure if BIO creation fails.
-        return false;  // Return false if BIO creation fails.
+        // Free the RSA structure if BIO creation fails.
+        RSA_free(rsa);
+        // Return false if BIO creation fails.
+        return false; 
     }
 
     // Write the public key from the private key in k_priv to the BIO.
     if (PEM_write_bio_PUBKEY(bio_pub, *k_priv) != 1)
     {
-        BIO_free_all(bio_pub); // Free the BIO if writing the public key fails.
-        RSA_free(rsa);         // Free the RSA structure if writing the public key fails.
-        return false;          // Return false if writing the public key fails.
+        // Free the BIO if writing the public key fails.
+        BIO_free_all(bio_pub);
+        // Free the RSA structure if writing the public key fails.
+        RSA_free(rsa);     
+        // Return false if writing the public key fails.    
+        return false;          
     }
 
     // Read the public key from the BIO into the k_pub pointer.
     if (PEM_read_bio_PUBKEY(bio_pub, k_pub, nullptr, nullptr) != *k_pub)
     {
-        BIO_free_all(bio_pub); // Free the BIO if reading the public key fails.
-        RSA_free(rsa);         // Free the RSA structure if reading the public key fails.
-        return false;          // Return false if reading the public key fails.
+        // Free the BIO if reading the public key fails.
+        BIO_free_all(bio_pub); 
+        // Free the RSA structure if reading the public key fails.
+        RSA_free(rsa);
+        // Return false if reading the public key fails.         
+        return false;         
     }
 
-    BIO_free_all(bio_pub); // Free the BIO now as it's no longer needed.
+    // Free the BIO now as it's no longer needed.
+    BIO_free_all(bio_pub);
 
     // If all steps complete successfully, return true.
     return true;
 }
 
+/**
+ * @brief Serialize a public key into a buffer of unsigned char
+ * 
+ * @param public_key the public key to serialize
+ * @param serialized_key the buffer where to store the serialized key
+ * @return int the length of the serialized key if the serialization was successful, -1 otherwise
+ */
 int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 {
     BIO *bio = BIO_new(BIO_s_mem());
@@ -247,6 +327,7 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
         return -1;
     }
 
+    // Write the public key to the BIO
     if (!PEM_write_bio_PUBKEY(bio, public_key))
     {
         std::cerr << "Error during PEM_write_bio_PUBKEY" << std::endl;
@@ -254,9 +335,9 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
         return -1;
     }
 
+    // Read the public key from the BIO into the serialized_key buffer
     int key_len = BIO_pending(bio);
     *serialized_key = new unsigned char[key_len];
-
     if (BIO_read(bio, *serialized_key, key_len) != key_len)
     {
         std::cerr << "Error during BIO_read" << std::endl;
@@ -273,6 +354,15 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 // DIGITAL SIGNATURE
 // --------------------------------------------------------------------------
 
+/**
+ * @brief Create a digital signature for a given data
+ * 
+ * @param private_key the private key to use to sign the data
+ * @param data the data to sign
+ * @param data_len the length of the data to sign
+ * @param signature the buffer where to store the signature
+ * @return int the length of the signature if the signature was successful, -1 otherwise
+ */
 int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, size_t data_len, unsigned char *signature)
 {
     const EVP_MD *digest = EVP_sha256();
@@ -314,6 +404,16 @@ int create_digital_signature(EVP_PKEY *private_key, const unsigned char *data, s
     return signature_len;
 }
 
+/**
+ * @brief Verify a digital signature for a given data
+ * 
+ * @param public_key the public key to use to verify the signature
+ * @param signature the signature to verify
+ * @param signature_len the length of the signature
+ * @param data the data to verify
+ * @param data_len the length of the data to verify
+ * @return the result of the verification
+ */
 int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signature, unsigned int signature_len, const unsigned char *data, size_t data_len)
 {
     const EVP_MD *digest = EVP_sha256();
@@ -361,6 +461,19 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 // The cipher to be used for encryption and decryption
 const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
+/**
+ * @brief Encrypt a plaintext using AES-256 GCM
+ * 
+ * @param plaintext the plaintext to encrypt
+ * @param plaintext_len the length of the plaintext
+ * @param aad the additional authenticated data
+ * @param aad_len the length of the additional authenticated data
+ * @param key the key to use for encryption
+ * @param iv the initialization vector to use for encryption
+ * @param ciphertext the buffer where to store the ciphertext
+ * @param tag the buffer where to store the tag
+ * @return int the length of the ciphertext if the encryption was successful, -1 otherwise
+ */
 int aesgcm_encrypt(const unsigned char *plaintext,
                    int plaintext_len,
                    const unsigned char *aad, int aad_len,
@@ -426,6 +539,19 @@ int aesgcm_encrypt(const unsigned char *plaintext,
     return ciphertext_len;
 }
 
+/**
+ * @brief Decrypt a ciphertext using AES-256 GCM
+ * 
+ * @param ciphertext the ciphertext to decrypt
+ * @param ciphertext_len the length of the ciphertext
+ * @param aad the additional authenticated data
+ * @param aad_len the length of the additional authenticated data
+ * @param tag the tag to use for decryption
+ * @param key the key to use for decryption
+ * @param iv the initialization vector to use for decryption
+ * @param plaintext the buffer where to store the plaintext
+ * @return int the length of the plaintext if the decryption was successful, -1 otherwise
+ */
 int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
                    const unsigned char *aad, int aad_len,
                    unsigned char *tag,
@@ -497,6 +623,16 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
     }
 }
 
+/**
+ * @brief Decrypt a ciphertext using RSA
+ * 
+ * @param ciphertext the ciphertext to decrypt
+ * @param ciphertextLength the length of the ciphertext
+ * @param privateKey the private key to use for decryption
+ * @param plaintext the buffer where to store the plaintext
+ * @param plaintextLength the length of the plaintext
+ * @return true if the decryption was successful, false otherwise
+ */
 bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, int &plaintextLength)
 {
     RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
@@ -522,6 +658,13 @@ bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PK
     return true;
 }
 
+/**
+ * @brief The function for duplicate a RSA key
+ * 
+ * @param pkey the key to duplicate
+ * @param is_private true if the key is private, false otherwise
+ * @return EVP_PKEY* the duplicated key
+ */
 EVP_PKEY *duplicate_key(EVP_PKEY *pkey, bool is_private)
 {
     EVP_PKEY *pDupKey = EVP_PKEY_new();
