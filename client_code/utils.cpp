@@ -241,13 +241,13 @@ bool send_file(Session *session, std::string const &file_path)
     for (int i = 0; i < num_sends; ++i)
     {
         // We use a flag to indicate if the current chunk is the last one
-        int esito = 1;
+        int not_last_message = 1;
         auto bytes_to_read = CHUNK_SIZE;
         // If the current chunk is the last one, we need to read only the remaining bytes
         if (i == num_sends - 1)
         {
             bytes_to_read = static_cast<int>(file_size - i * CHUNK_SIZE);
-            esito = 0;
+            not_last_message = 0;
         }
         // Resize the buffer to the number of bytes to read
         buffer.resize(bytes_to_read);
@@ -255,7 +255,7 @@ bool send_file(Session *session, std::string const &file_path)
         input_file.read(&buffer[0], bytes_to_read);
 
         // Send the chunk
-        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, esito))
+        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, not_last_message))
         {
             std::cerr << "Error during the sending of the file " << file_path << std::endl;
             input_file.close();
@@ -268,15 +268,15 @@ bool send_file(Session *session, std::string const &file_path)
     // Close the file
     input_file.close();
 
-    unsigned int esito;
+    unsigned int not_last_message;
     std::string response;
     // Receive the response from the server
-    if (!receive_message(session, &response, true, &esito))
+    if (!receive_message(session, &response, true, &not_last_message))
     {
         log_error("Error during the reception of the result of the transfer of the file", true);
         return false;
     }
-    if (esito == 0)
+    if (not_last_message == 0)
     {
         log_error("Error during the transfer of the file", true);
         return false;
@@ -327,14 +327,14 @@ bool send_message(Session *session, const std::string payload)
  *
  * @param session the session to use
  * @param payload the payload of the message
- * @param send_esito
- * @param esito
+ * @param send_not_last_message if true, the not_last_message flag is sent
+ * @param not_last_message notify if the message is not the last one to send
  * @return true if the message is sent successfully, false otherwise
  */
-bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito)
+bool send_message(Session *session, const std::string payload, bool send_not_last_message, unsigned int not_last_message)
 {
-    // The size of AAD depends if we need to send the esito or not
-    int aad_len = sizeof(int) + ((send_esito) ? sizeof(int) : 0);
+    // The size of AAD depends if we need to send the not_last_message or not
+    int aad_len = sizeof(int) + ((send_not_last_message) ? sizeof(int) : 0);
     unsigned char *plaintext = new unsigned char[payload.size()];
     unsigned char *aad = new unsigned char[aad_len];
     unsigned char *iv = new unsigned char[IV_LEN];
@@ -351,12 +351,12 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
 
     // Create the AAD
     memcpy(aad, counter_byte, sizeof(int));
-    if (send_esito)
+    if (send_not_last_message)
     {
-        unsigned char *esito_byte = new unsigned char[sizeof(int)];
-        serialize_int(esito, esito_byte);
-        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
-        delete_buffers(esito_byte);
+        unsigned char *not_last_message_byte = new unsigned char[sizeof(int)];
+        serialize_int(not_last_message, not_last_message_byte);
+        memcpy(aad + sizeof(int), not_last_message_byte, sizeof(int));
+        delete_buffers(not_last_message_byte);
     }
     // Copy the payload in the plaintext buffer
     memcpy(plaintext, payload.c_str(), payload.size());
@@ -382,7 +382,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     unsigned int message_size = sizeof(long int) + aad_len + ciphertext_len + TAG_LEN + IV_LEN;
 
     unsigned char *message = new unsigned char[message_size];
-    // MESSAGE: payload_len | counter | esito* | payload | tag | iv
+    // MESSAGE: payload_len | counter | not_last_message* | payload | tag | iv
     memcpy(message, command_len_byte, sizeof(int));
     memcpy(message + sizeof(long int), aad, aad_len);
     memcpy(message + sizeof(long int) + aad_len, ciphertext, ciphertext_len);
@@ -422,11 +422,11 @@ bool receive_message(Session *session, std::string *payload)
  *
  * @param session the session to use
  * @param payload the payload of the message
- * @param receive_esito
- * @param esito
+ * @param receive_not_last_message if true, the not_last_message flag is received
+ * @param not_last_message notify if the message is not the last one to receive
  * @return true if the message is received successfully, false otherwise
  */
-bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
+bool receive_message(Session *session, std::string *payload, bool receive_not_last_message, unsigned int *not_last_message)
 {
     // Read the payload length from the socket
     long int message_len;
@@ -462,27 +462,29 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
         return false;
     }
 
+    // Update the session counter
     session->server_counter++;
 
-    unsigned char *esito_byte = new unsigned char[sizeof(int)];
-    if (receive_esito)
+    // Read the not_last_message flag from the socket
+    unsigned char *not_last_message_byte = new unsigned char[sizeof(int)];
+    if (receive_not_last_message)
     {
-        if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
+        if (!recv_all(session->socket, (void *)not_last_message_byte, sizeof(int)))
         {
-            log_error("Failed to read esito", true);
-            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
+            log_error("Failed to read not_last_message", true);
+            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, not_last_message_byte);
             return false;
         }
-        memcpy(esito, esito_byte, sizeof(int));
+        memcpy(not_last_message, not_last_message_byte, sizeof(int));
     }
 
-    unsigned int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
+    unsigned int aad_len = sizeof(int) + ((receive_not_last_message) ? sizeof(int) : 0);
     unsigned char *aad = new unsigned char[aad_len];
     memcpy(aad, counter_byte, sizeof(int));
-    if (receive_esito)
+    if (receive_not_last_message)
     {
-        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
-        delete_buffers(esito_byte);
+        memcpy(aad + sizeof(int), not_last_message_byte, sizeof(int));
+        delete_buffers(not_last_message_byte);
     }
     // Allocate buffers for the tag
     unsigned char *tag = new unsigned char[TAG_LEN];
@@ -528,6 +530,13 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     return true;
 }
 
+/**
+ * @brief This function checks if the file is available to upload. 
+ * 
+ * @param path the path of the file to upload
+ * @param response indicates if the file is available to upload
+ * @return true if the file is available to upload, false otherwise
+ */
 bool check_availability_to_upload(std::string const &path, std::string *response)
 {
 
@@ -553,11 +562,17 @@ bool check_availability_to_upload(std::string const &path, std::string *response
         input_file.close();
         return false;
     }
-    // response prende la dimensione del file
     input_file.close();
     return true;
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool UploadClient::validate_command(Session *session, const std::string command)
 {
 
@@ -621,15 +636,21 @@ bool UploadClient::execute(Session *session, std::string command)
     }
     else
     {
-        printf("File non caricato %s\n", response.c_str());
+        log_error("Error uploading file", false);
     }
 
     return true;
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool DownloadClient::validate_command(Session *session, const std::string command)
 {
-
     std::istringstream iss(command);
     std::vector<std::string> tokens;
     std::string token;
@@ -671,17 +692,18 @@ bool DownloadClient::execute(Session *session, std::string command)
 
     if (exists == 1)
     {
-        // ricevo da tastiera s o n
-        std::string esito;
-        std::cin >> esito;
+        // ask if the user wants to download the file
+        std::string user_answer;
+        std::cin >> user_answer;
 
-        if (!send_message(session, esito))
+        if (!send_message(session, user_answer))
         {
             log_error("Error sending message", false);
             return false;
         }
 
-        if (esito != "s") {
+        // if the user doesn't want to download the file, return
+        if (user_answer != "y") {
             return true;
         }
 
@@ -696,17 +718,15 @@ bool DownloadClient::execute(Session *session, std::string command)
         while (!is_last)
         {
             std::string buffer;
-            unsigned int esito_receive;
-            if (!receive_message(session, &buffer, true, &esito_receive))
+            unsigned int not_last_message_receive;
+            if (!receive_message(session, &buffer, true, &not_last_message_receive))
             {
                 log_error("Error during receiving file ", false);
                 break;
             }
-            is_last = esito_receive == 0;
+            is_last = not_last_message_receive == 0;
             output_file << buffer;
         }
-
-        // Leggi il file a blocchi di 1 MB alla volta e scrivi ogni blocco
 
         output_file.close();
     }
@@ -724,6 +744,13 @@ bool DownloadClient::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool DeleteClient::validate_command(Session *session, const std::string command)
 {
 
@@ -744,6 +771,13 @@ bool DeleteClient::validate_command(Session *session, const std::string command)
     return true;
 }
 
+/**
+ * @brief This function ask the server to delete a file.
+ * 
+ * @param session the session of the client
+ * @param command the command to execute
+ * @return true if the command is executed correctly, false otherwise
+ */
 bool DeleteClient::execute(Session *session, std::string command)
 {
     std::string response_existance;
@@ -758,12 +792,12 @@ bool DeleteClient::execute(Session *session, std::string command)
 
     if (exists == 1)
     {
-        // ricevo da tastiera s o n
-        std::string esito;
-        std::cin >> esito;
+        // ask if the user wants to delete the file
+        std::string user_answer;
+        std::cin >> user_answer;
 
         std::string response;
-        if (!send_message(session, esito))
+        if (!send_message(session, user_answer))
         {
             log_error("Error sending message", false);
             return false;
@@ -786,6 +820,13 @@ bool DeleteClient::execute(Session *session, std::string command)
     }
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool ListClient::validate_command(Session *session, const std::string command)
 {
 
@@ -806,6 +847,13 @@ bool ListClient::validate_command(Session *session, const std::string command)
     return true;
 }
 
+/**
+ * @brief This function ask the server to list all the files of the user.
+ * 
+ * @param session the session of the client
+ * @param command the command to execute
+ * @return true if the command is executed correctly, false otherwise
+ */
 bool ListClient::execute(Session *session, std::string command)
 {
     std::string response;
@@ -818,6 +866,13 @@ bool ListClient::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool RenameClient::validate_command(Session *session, const std::string command)
 {
 
@@ -838,6 +893,13 @@ bool RenameClient::validate_command(Session *session, const std::string command)
     return true;
 }
 
+/**
+ * @brief This function ask the server to rename a file.
+ * 
+ * @param session the session of the client
+ * @param command the command to execute
+ * @return true if the command is executed correctly, false otherwise
+ */
 bool RenameClient::execute(Session *session, std::string command)
 {
 
@@ -851,6 +913,13 @@ bool RenameClient::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function checks if the command syntax is valid.
+ * 
+ * @param session the session of the client
+ * @param command the command to validate
+ * @return true if the command is valid, false otherwise
+ */
 bool LogoutClient::validate_command(Session *session, const std::string command)
 {
 

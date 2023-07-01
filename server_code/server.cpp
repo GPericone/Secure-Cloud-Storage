@@ -75,7 +75,7 @@ void handle_client(int newSd)
             break;
         }
 
-        std::cout << "Comando ricevuto: " << command << std::endl;
+        std::cout << "Command received: " << command << std::endl;
 
         auto iter = server_command_map.find(command.substr(0, command.find(' ')));
         if (iter != server_command_map.end())
@@ -87,10 +87,12 @@ void handle_client(int newSd)
         }
         else
         {
-            std::cout << "Comando non riconosciuto" << std::endl;
+            log_error("Command not recognized");
+            break;
         }
     }
     session.reset();
+
     // Close the connection with the client
     close(newSd);
 }

@@ -1,16 +1,34 @@
 #include "utils.h"
 
+/**
+ * @brief Print an error message on the standard error output
+ * 
+ * @param msg The message to print
+ */
 void log_error(const std::string &msg)
 {
     std::cerr << "Error: " << msg << std::endl;
 }
 
+/**
+ * @brief This function serialize an int value into a buffer of unsigned char
+ *
+ * @param input the int value to serialize
+ * @param output the buffer where the serialized value will be stored
+ */
 void serialize_int(int input, unsigned char *output)
 {
     unsigned char *p = reinterpret_cast<unsigned char *>(&input);
     std::copy(p, p + sizeof(int), output);
 }
 
+/**
+ * @brief This function serialize a long int value into a buffer of unsigned char
+ *
+ * @param value the long int value to serialize
+ * @param buffer the buffer where the serialized value will be stored
+ * @param buffer_size the size of the buffer
+ */
 void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size)
 {
     if (buffer_size >= sizeof(long int))
@@ -19,15 +37,22 @@ void serialize_longint(long int value, unsigned char *buffer, size_t buffer_size
     }
     else
     {
-        std::cout << "Dimensione del buffer insufficiente!" << std::endl;
+        log_error("Buffer size is too small to store the value");
     }
 }
 
+/**
+ * @brief This function deserialize a buffer of unsigned char into an long int value
+ *
+ * @param buffer the buffer to deserialize
+ * @param result the long int value where the deserialized value will be stored
+ * @return true if the deserialization is successful, false otherwise
+ */
 bool deserialize_longint(const unsigned char *buffer, long int *result)
 {
     if (buffer == nullptr || result == nullptr)
     {
-        return false; // Controllo di validità dei puntatori
+        return false; 
     }
 
     *result = 0;
@@ -36,7 +61,7 @@ bool deserialize_longint(const unsigned char *buffer, long int *result)
     {
         if (buffer[i] == '\0')
         {
-            break; // Interrompi la deserializzazione se viene trovato un carattere di fine stringa
+            break;
         }
         *result |= static_cast<long int>(buffer[i]) << (8 * i);
     }
@@ -44,6 +69,12 @@ bool deserialize_longint(const unsigned char *buffer, long int *result)
     return true;
 }
 
+/**
+ * @brief This function convert a int value to a size_t value in a safe way
+ *
+ * @param value the int value to convert
+ * @return size_t the converted value
+ */
 size_t int_to_size_t(int value)
 {
     if (value < 0)
@@ -54,11 +85,23 @@ size_t int_to_size_t(int value)
     return static_cast<size_t>(value);
 }
 
+/**
+ * @brief This function receive a message from a socket and store in a buffer.
+ * Differently from recv function, this continue to receive data until all requested bytes have been read or an error occurs.
+ *
+ * @param socket the socket to read from
+ * @param buffer the buffer where the message will be stored
+ * @param len the length of the message to receive
+ * @return true if the message is received successfully, false otherwise
+ */
 bool recv_all(int socket, void *buffer, ssize_t len)
 {
-    ssize_t bytes_left = len;                       // The number of bytes remaining to be received
-    ssize_t bytes_read;                             // The number of bytes read in the current iteration
-    char *buffer_ptr = static_cast<char *>(buffer); // A pointer to the current position in the buffer
+    // The number of bytes remaining to be received
+    ssize_t bytes_left = len;       
+    // The number of bytes read in the current iteration               
+    ssize_t bytes_read;
+    // A pointer to the current position in the buffer                             
+    char *buffer_ptr = static_cast<char *>(buffer); 
 
     // Continue to receive data until all requested bytes have been read or an error occurs
     while (bytes_left > 0)
@@ -118,11 +161,18 @@ bool isRegistered(std::string username)
     return false;
 }
 
+/**
+ * @brief This function convert a size_t value to a int value in a safe way
+ *
+ * @param value the size_t value to convert
+ * @return int the converted value
+ */
 int size_t_to_int(size_t value)
 {
     if (value > static_cast<size_t>(std::numeric_limits<int>::max()))
     {
-        throw std::runtime_error("Conversion error: size_t value is too large for int");
+        log_error("Conversion error: size_t value is too big");
+        return -1;
     }
 
     return static_cast<int>(value);
@@ -141,6 +191,12 @@ void deleteBuffers(T *buffer, Ts *...buffers)
     deleteBuffers(buffers...);
 }
 
+/**
+ * @brief Get the size of the file as a double
+ * 
+ * @param path the path of the file
+ * @return double the size of the file
+ */
 double get_double_file_size(std::string const &path)
 {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -160,60 +216,65 @@ bool send_file(Session *session, std::string const &file_path)
     std::ifstream input_file(file_path, std::ios::binary);
     if (!input_file)
     {
-        log_error("Errore durante l'apertura del file " + file_path);
+        log_error("Error opening file " + file_path);
         return false;
     }
 
     input_file.seekg(0, std::ios::beg);
 
-    // Leggi il file a blocchi di 1 MB alla volta e invia ogni blocco
+    // Read the file in chunks of 1 MB at a time and send each chunk
     std::string buffer;
 
     auto file_size = get_double_file_size(file_path);
     int num_sends = static_cast<int>((file_size + CHUNK_SIZE - 1) / CHUNK_SIZE);
     for (int i = 0; i < num_sends; ++i)
     {
-        int esito = 1;
+        int not_last_message = 1;
         auto bytes_to_read = CHUNK_SIZE;
         if (i == num_sends - 1)
         {
             bytes_to_read = static_cast<int>(file_size - i * CHUNK_SIZE);
-            esito = 0;
+            not_last_message = 0;
         }
         buffer.resize(bytes_to_read);
         input_file.read(&buffer[0], bytes_to_read);
 
-        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, esito)) // inviare il flag finale solo per l'ultimo chunk
+        if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, not_last_message))
         {
-            log_error("Errore durante l'invio del file " + file_path);
+            log_error("Error during the sending of the file " + file_path);
             input_file.close();
             return false;
         }
-        // pulisco il buffer;
         buffer.clear();
     }
 
     input_file.close();
 
-    unsigned int esito;
+    unsigned int not_last_message;
     std::string response;
-    if (!receive_message(session, &response, true, &esito))
+    if (!receive_message(session, &response, true, &not_last_message))
     {
-        log_error("Errore durante la ricezione dell'esito del download del file " + file_path);
+        log_error("Error during the reception of the not_last_message of the file " + file_path);
         return false;
     }
-    if (esito == 0)
+    if (not_last_message == 0)
     {
-        log_error("Errore durante il download del file " + file_path);
+        log_error("Error during the download of the file " + file_path);
         return false;
     }
     else
     {
-        std::cout << "Download del file " << file_path << " completato" << std::endl;
+        std::cout << "File downloaded: " << file_path << std::endl;
         return true;
     }
 }
 
+/**
+ * @brief Get the file size in bytes
+ * 
+ * @param path the path of the file
+ * @return std::string the size of the file
+ */
 std::string get_file_size_no_ext(const std::string &path)
 {
     auto mantissa = get_double_file_size(path);
@@ -222,13 +283,19 @@ std::string get_file_size_no_ext(const std::string &path)
     return stream.str();
 }
 
+/**
+ * @brief Get the file size in human readable format
+ * 
+ * @param path the path of the file
+ * @return std::string the size of the file
+ */
 std::string get_file_size(std::string const &path)
 {
     auto mantissa = get_double_file_size(path);
     int i = 0;
     for (; mantissa >= 1024.0; mantissa /= 1024.0, ++i)
     {
-        // Stiamo solo cercando la mantissa, nessuna operazione richiesta
+        // We are just looking for the mantissa, no operation required
     }
 
     std::stringstream stream;
@@ -236,14 +303,30 @@ std::string get_file_size(std::string const &path)
     return stream.str() + " " + "BKMGTPE"[i] + std::string((i == 0) ? "yte" : "B");
 }
 
+/**
+ * @brief This function send a message
+ *
+ * @param session the session to use
+ * @param payload the payload of the message
+ * @return true if the message is sent successfully, false otherwise
+ */
 bool send_message(Session *session, const std::string payload)
 {
     return send_message(session, payload, false, 0);
 }
 
-bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito)
+/**
+ * @brief This function send a message
+ *
+ * @param session the session to use
+ * @param payload the payload of the message
+ * @param send_not_last_message if true, the not_last_message flag is sent
+ * @param not_last_message notify if the message is not the last one to send
+ * @return true if the message is sent successfully, false otherwise
+ */
+bool send_message(Session *session, const std::string payload, bool send_not_last_message, unsigned int not_last_message)
 {
-    int aad_len = sizeof(int) + ((send_esito) ? sizeof(int) : 0);
+    int aad_len = sizeof(int) + ((send_not_last_message) ? sizeof(int) : 0);
     unsigned char *plaintext = new unsigned char[payload.size()];
     unsigned char *aad = new unsigned char[aad_len];
     unsigned char *iv = new unsigned char[IV_LEN];
@@ -259,12 +342,12 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     serialize_int(session->server_counter, counter_byte);
 
     memcpy(aad, counter_byte, sizeof(int));
-    if (send_esito)
+    if (send_not_last_message)
     {
-        unsigned char *esito_byte = new unsigned char[sizeof(int)];
-        serialize_int(esito, esito_byte);
-        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
-        delete_buffers(esito_byte);
+        unsigned char *not_last_message_byte = new unsigned char[sizeof(int)];
+        serialize_int(not_last_message, not_last_message_byte);
+        memcpy(aad + sizeof(int), not_last_message_byte, sizeof(int));
+        delete_buffers(not_last_message_byte);
     }
     memcpy(plaintext, payload.c_str(), payload.size());
 
@@ -288,7 +371,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     int message_size = sizeof(long int) + aad_len + ciphertext_len + TAG_LEN + IV_LEN;
 
     unsigned char *message = new unsigned char[message_size];
-    // message: payload_len | counter | esito* | payload | tag | iv
+    // message: payload_len | counter | not_last_message* | payload | tag | iv
     memcpy(message, command_len_byte, sizeof(int));
     memcpy(message + sizeof(long int), aad, aad_len);
     memcpy(message + sizeof(long int) + aad_len, ciphertext, ciphertext_len);
@@ -305,7 +388,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
 
     if (session->server_counter + 1 >= UINT_MAX)
     {
-        std::cout << "Il contatore del server ha raggiunto il massimo valore consentito" << std::endl;
+        std::cout << "The server counter has reached the maximum allowed value" << std::endl;
         return false;
     }
 
@@ -317,12 +400,28 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
     return true;
 }
 
+/**
+ * @brief This function receive a message
+ *
+ * @param session the session to use
+ * @param payload the payload of the message
+ * @return true if the message is received successfully, false otherwise
+ */
 bool receive_message(Session *session, std::string *payload)
 {
     return receive_message(session, payload, false, nullptr);
 }
 
-bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
+/**
+ * @brief This function receive a message
+ *
+ * @param session the session to use
+ * @param payload the payload of the message
+ * @param receive_not_last_message if true, the not_last_message flag is received
+ * @param not_last_message notify if the message is not the last one to receive
+ * @return true if the message is received successfully, false otherwise
+ */
+bool receive_message(Session *session, std::string *payload, bool receive_not_last_message, unsigned int *not_last_message)
 {
     // Read the payload length from the socket
     long int message_len;
@@ -359,25 +458,25 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
 
     session->client_counter++;
 
-    unsigned char *esito_byte = new unsigned char[sizeof(int)];
-    if (receive_esito)
+    unsigned char *not_last_message_byte = new unsigned char[sizeof(int)];
+    if (receive_not_last_message)
     {
-        if (!recv_all(session->socket, (void *)esito_byte, sizeof(int)))
+        if (!recv_all(session->socket, (void *)not_last_message_byte, sizeof(int)))
         {
-            log_error("Failed to read esito");
-            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, esito_byte);
+            log_error("Failed to read not_last_message");
+            delete_buffers(message_len_byte, counter_byte, ciphertext, plaintext, not_last_message_byte);
             return false;
         }
-        memcpy(esito, esito_byte, sizeof(int));
+        memcpy(not_last_message, not_last_message_byte, sizeof(int));
     }
 
-    unsigned int aad_len = sizeof(int) + ((receive_esito) ? sizeof(int) : 0);
+    unsigned int aad_len = sizeof(int) + ((receive_not_last_message) ? sizeof(int) : 0);
     unsigned char *aad = new unsigned char[aad_len];
     memcpy(aad, counter_byte, sizeof(int));
-    if (receive_esito)
+    if (receive_not_last_message)
     {
-        memcpy(aad + sizeof(int), esito_byte, sizeof(int));
-        delete_buffers(esito_byte);
+        memcpy(aad + sizeof(int), not_last_message_byte, sizeof(int));
+        delete_buffers(not_last_message_byte);
     }
     // Allocate buffers for the tag
     unsigned char *tag = new unsigned char[TAG_LEN];
@@ -423,6 +522,13 @@ bool receive_message(Session *session, std::string *payload, bool receive_esito,
     return true;
 }
 
+/**
+ * @brief This function receives an upload request from the client, receives the file and saves it
+ * 
+ * @param session the server session
+ * @param command the command to execute
+ * @return true if the command is executed successfully, false otherwise
+ */
 bool UploadServer::execute(Session *session, std::string command)
 {
     std::istringstream iss(command);
@@ -435,8 +541,8 @@ bool UploadServer::execute(Session *session, std::string command)
 
     if (tokens.size() != 2)
     {
-        std::cout << "Il comando richiede 1 parametro, nome del file da scaricare, riprova" << std::endl;
-        if (!send_message(session, "Il comando richiede 1 parametro, nome del file da scaricare, riprova"))
+        std::cerr << " The command received requires 1 parameter, file name to upload, try again" << std::endl;
+        if (!send_message(session, "The command received requires 1 parameter, file name to upload, try again\n"))
         {
             log_error("Failed to send message");
             return false;
@@ -445,51 +551,51 @@ bool UploadServer::execute(Session *session, std::string command)
     }
 
     std::string file_size;
-    unsigned int esito = 0;
-    if (!receive_message(session, &file_size, true, &esito))
+    unsigned int not_last_message = 0;
+    if (!receive_message(session, &file_size, true, &not_last_message))
     {
         log_error("Failed to receive message");
         return false;
     }
 
-    if (esito == 0)
+    if (not_last_message == 0)
     {
         return true;
     }
 
-    // check che il file non sia più grande di 4GB
-    std::string esito_string = "";
-    int valido = 1;
+    // Check if the file size is less than 4GB
+    std::string not_last_message_string = "";
+    int valid = 1;
     if (std::stoul(file_size) > UINT32_MAX)
     {
-        esito_string = "Dimensione file maggiore di 4GB, riprova\n";
-        valido = 0;
+        not_last_message_string = "File dimension greater than 4GB, try again\n";
+        valid = 0;
     }
 
     std::string file_to_upload = tokens[1];
 
-    if (valido == 1)
+    if (valid == 1)
     {
         std::ofstream output_file("server_file/users/" + session->username + "/" + file_to_upload, std::ios::binary);
         if (!std::regex_match(file_to_upload, pattern))
         {
-            log_error("Nome file non valido " + file_to_upload);
-            esito_string = "Nome file non valido " + file_to_upload + "\n";
-            valido = 0;
+            log_error("Filename not valid " + file_to_upload);
+            not_last_message_string = "Filename not valid ";
+            valid = 0;
         }
         else if (!output_file)
         {
-            log_error("Errore durante la creazione del file " + file_to_upload);
-            esito_string = "Errore durante la creazione del file " + file_to_upload + "";
-            valido = 0;
+            log_error("Error during file creation " + file_to_upload);
+            not_last_message_string += "Error during file creation ";
+            valid = 0;
         }
 
-        if (!send_message(session, esito_string, true, valido))
+        if (!send_message(session, not_last_message_string, true, valid))
         {
             log_error("Failed to send message");
             return false;
         }
-        if (valido == 0)
+        if (valid == 0)
         {
             std::cout << std::endl;
             return true;
@@ -498,23 +604,23 @@ bool UploadServer::execute(Session *session, std::string command)
         while (!is_last)
         {
             std::string buffer;
-            unsigned int esito_receive;
-            if (!receive_message(session, &buffer, true, &esito_receive))
+            unsigned int not_last_message_receive;
+            if (!receive_message(session, &buffer, true, &not_last_message_receive))
             {
-                log_error("Errore durante la ricezione del file " + file_to_upload);
+                log_error("Error during file reception " + file_to_upload);
                 break;
             }
-            is_last = esito_receive == 0;
+            is_last = not_last_message_receive == 0;
             output_file << buffer;
         }
 
-        // Leggi il file a blocchi di 1 MB alla volta e scrivi ogni blocco
+        // Read the file in blocks of 1 MB at a time and write each block
 
         output_file.close();
     }
     else
     {
-        if (!send_message(session, esito_string, true, valido))
+        if (!send_message(session, not_last_message_string, true, valid))
         {
             log_error("Failed to send message");
             return false;
@@ -523,7 +629,7 @@ bool UploadServer::execute(Session *session, std::string command)
         return true;
     }
 
-    if (!send_message(session, "File scaricato correttamente\n", true, 1))
+    if (!send_message(session, "File downloaded successfully\n", true, 1))
     {
         log_error("Failed to send message");
         return false;
@@ -531,6 +637,13 @@ bool UploadServer::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief the function checks if the file is available to download
+ * 
+ * @param path the path of the file
+ * @param response indicates if the file is available to download and that the file size is less than 4 GB
+ * @return true if the file is available to download, false otherwise
+ */
 bool check_availability_to_download(std::string const &path, std::string *response)
 {
 
@@ -551,13 +664,20 @@ bool check_availability_to_download(std::string const &path, std::string *respon
     input_file.seekg(0, std::ios::beg);
     if (file_size > UINT32_MAX)
     {
-        *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
+        *response = "Error: file is bigger than 4 GB.";
         return false;
     }
-    *response = "Il file esiste, ha una dimensione di " + get_file_size(path) + " sei sicuro di voler effettuare il download? (s/n)";
+    *response = "The file exists, it has a size of " + get_file_size(path) + " are you sure you want to download it? (y/n)";
     return true;
 }
 
+/**
+ * @brief This function receives a download request from the client and sends the file to the client
+ * 
+ * @param session the server session
+ * @param command the command to execute
+ * @return true if the command is executed successfully, false otherwise
+ */
 bool DownloadServer::execute(Session *session, std::string command)
 {
     std::istringstream iss(command);
@@ -570,8 +690,8 @@ bool DownloadServer::execute(Session *session, std::string command)
 
     if (tokens.size() != 2)
     {
-        printf("Il comando richiede 1 parametro, nome del file da scaricare, riprova\n");
-        if (!send_message(session, "Il comando richiede 1 parametro, nome del file da scaricare, riprova\n"))
+        log_error("The command received requires 1 parameter, file name to download, try again");
+        if (!send_message(session, "The command received requires 1 parameter, file name to download, try again\n"))
         {
             log_error("Failed to send message");
             return false;
@@ -599,9 +719,7 @@ bool DownloadServer::execute(Session *session, std::string command)
             log_error("Failed to receive message");
             return false;
         }
-
-        // se response è uguale a s elimino altrimenti no
-        if (response == "s")
+        if (response == "y")
         {
             if (!send_file(session, file_to_download.c_str()))
             {
@@ -618,6 +736,13 @@ bool DownloadServer::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function checks if the file exists
+ * 
+ * @param path the path of the file
+ * @param response the response to send to the client
+ * @return true if the file exists, false otherwise
+ */
 bool check_file_existance(std::string const &path, std::string *response)
 {
     std::ifstream input_file(path, std::ios::binary);
@@ -628,11 +753,17 @@ bool check_file_existance(std::string const &path, std::string *response)
     }
     else
     {
-        *response = "File exists, are you sure you want to delete it? (s/n)\n";
+        *response = "File exists, are you sure you want to delete it? (/n)\n";
         return true;
     }
 }
 
+/**
+ * @brief This function deletes a file
+ * 
+ * @param path the path of the file
+ * @return std::string the response to send to the client
+ */
 std::string delete_file(std::string const &path)
 {
     if (std::remove(path.c_str()) == 0)
@@ -642,6 +773,13 @@ std::string delete_file(std::string const &path)
     return "File not found\n";
 }
 
+/**
+ * @brief This function receives a delete request from the client and deletes the file
+ * 
+ * @param session the server session
+ * @param command the command to execute
+ * @return true if the command is executed successfully, false otherwise
+ */
 bool DeleteServer::execute(Session *session, std::string command)
 {
     std::istringstream iss(command);
@@ -654,8 +792,8 @@ bool DeleteServer::execute(Session *session, std::string command)
 
     if (tokens.size() != 2)
     {
-        printf("Il comando richiede 1 parametro, nome del file da eliminare, riprova\n");
-        if (!send_message(session, "Il comando richiede 1 parametro, nome del file da eliminare, riprova\n"))
+        log_error("The command received requires 1 parameter, file name to delete, try again");
+        if (!send_message(session, "The command received requires 1 parameter, file name to delete, try again\n"))
         {
             log_error("Failed to send message");
             return false;
@@ -682,8 +820,7 @@ bool DeleteServer::execute(Session *session, std::string command)
             return false;
         }
 
-        // se response è uguale a s elimino altrimenti no
-        if (response == "s")
+        if (response == "")
         {
             if (!send_message(session, delete_file(file_to_delete)))
             {
@@ -693,8 +830,8 @@ bool DeleteServer::execute(Session *session, std::string command)
         }
         else
         {
-            std::cout << "File non eliminato" << std::endl;
-            if (!send_message(session, "File non eliminato\n"))
+            log_error("File not deleted");
+            if (!send_message(session, "File not deleted\n"))
             {
                 log_error("Failed to send message");
                 return false;
@@ -705,6 +842,13 @@ bool DeleteServer::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function sends the list of files available on the server
+ * 
+ * @param session the server session
+ * @param command the command to execute
+ * @return true if the command is executed successfully, false otherwise
+ */
 bool ListServer::execute(Session *session, std::string command)
 {
     std::string path = "server_file/users/" + session->username;
@@ -717,14 +861,7 @@ bool ListServer::execute(Session *session, std::string command)
     struct dirent const *dp;
     std::string temp;
     std::string size;
-    auto ret = std::string("File disponibili sul server:\n");
-
-    // FILE *proc = popen("/bin/ls -al", "r");
-    // char buf[1024];
-    // while (!feof(proc) && fgets(buf, sizeof(buf), proc))
-    // {
-    //     std::cout << "* %s", buf);
-    // }
+    auto ret = std::string("Files available on the server:\n");
 
     while ((dp = readdir(folder)) != nullptr)
     {
@@ -744,6 +881,13 @@ bool ListServer::execute(Session *session, std::string command)
     return true;
 }
 
+/**
+ * @brief This function renames a file
+ * 
+ * @param old_file_name the old file name
+ * @param new_file_nam the new file name
+ * @return std::string the response to send to the client
+ */
 std::string rename_file(std::string const &old_file_name, std::string const &new_file_name)
 {
     // check esistenza file con nome oldFilePath
@@ -782,8 +926,8 @@ bool RenameServer::execute(Session *session, std::string command)
 
     if (tokens.size() != 3)
     {
-        std::cout << "Il comando richiede esattamente 2 parametri, nome del file da rinominare e nuovo nome del file, riprova" << std::endl;
-        if (!send_message(session, "Il comando richiede esattamente 2 parametri, nome del file da rinominare e nuovo nome del file, riprova\n"))
+        log_error("The command requires exactly 2 parameters, file name to rename and new file name, try again");
+        if (!send_message(session, "The command requires exactly 2 parameters, file name to rename and new file name, try again\n"))
         {
             log_error("Failed to send message");
             return false;
@@ -797,7 +941,7 @@ bool RenameServer::execute(Session *session, std::string command)
 
     if (!std::regex_match(tokens[1], pattern) || !std::regex_match(tokens[1], pattern))
     {
-        response = "Nome file non valido";
+        response = "Filename not valid";
     }
     else
     {

@@ -4,6 +4,13 @@
 // CERTIFICATES
 // --------------------------------------------------------------------------
 
+/**
+ * @brief Load a certificate from a file
+ * 
+ * @param filename the name of the file containing the certificate
+ * @param certificate the certificate where to store the loaded certificate
+ * @return true if the certificate was loaded successfully, false otherwise
+ */
 bool load_certificate(std::string filename, X509 **certificate)
 {
     FILE *fp = fopen(filename.c_str(), "r");
@@ -286,6 +293,19 @@ int verify_digital_signature(EVP_PKEY *public_key, const unsigned char *signatur
 // The cipher to be used for encryption and decryption
 const EVP_CIPHER *cipher = EVP_aes_256_gcm();
 
+/**
+ * @brief Encrypt a plaintext using AES-256 GCM
+ * 
+ * @param plaintext the plaintext to encrypt
+ * @param plaintext_len the length of the plaintext
+ * @param aad the additional authenticated data
+ * @param aad_len the length of the additional authenticated data
+ * @param key the key to use for encryption
+ * @param iv the initialization vector to use for encryption
+ * @param ciphertext the buffer where to store the ciphertext
+ * @param tag the buffer where to store the tag
+ * @return int the length of the ciphertext if the encryption was successful, -1 otherwise
+ */
 int aesgcm_encrypt(const unsigned char *plaintext,
                    int plaintext_len,
                    const unsigned char *aad, int aad_len,
@@ -351,6 +371,19 @@ int aesgcm_encrypt(const unsigned char *plaintext,
     return ciphertext_len;
 }
 
+/**
+ * @brief Decrypt a ciphertext using AES-256 GCM
+ * 
+ * @param ciphertext the ciphertext to decrypt
+ * @param ciphertext_len the length of the ciphertext
+ * @param aad the additional authenticated data
+ * @param aad_len the length of the additional authenticated data
+ * @param tag the tag to use for decryption
+ * @param key the key to use for decryption
+ * @param iv the initialization vector to use for decryption
+ * @param plaintext the buffer where to store the plaintext
+ * @return int the length of the plaintext if the decryption was successful, -1 otherwise
+ */
 int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
                    const unsigned char *aad, int aad_len,
                    unsigned char *tag,
@@ -422,6 +455,16 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
     }
 }
 
+/**
+ * @brief The function encrypts the plaintext using the RSA public key and returns the ciphertext.
+ * 
+ * @param plaintext the plaintext to encrypt
+ * @param plaintextLength the length of the plaintext
+ * @param publicKey the public key to use for encryption
+ * @param ciphertext the buffer where to store the ciphertext
+ * @param ciphertextLength the length of the ciphertext
+ * @return true if the encryption was successful, false otherwise
+ */
 bool rsaEncrypt(const unsigned char *plaintext, int plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, int &ciphertextLength)
 {
     RSA *rsaKey = EVP_PKEY_get1_RSA(publicKey);
@@ -447,6 +490,13 @@ bool rsaEncrypt(const unsigned char *plaintext, int plaintextLength, EVP_PKEY *p
     return true;
 }
 
+/**
+ * @brief The function for duplicate a RSA key
+ * 
+ * @param pkey the key to duplicate
+ * @param is_private true if the key is private, false otherwise
+ * @return EVP_PKEY* the duplicated key
+ */
 EVP_PKEY *duplicate_key(EVP_PKEY *pkey)
 {
     EVP_PKEY *pDupKey = EVP_PKEY_new();

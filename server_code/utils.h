@@ -1,5 +1,3 @@
-//TODO: unsigned nei messaggi
-
 #ifndef UTILS_H
 #define UTILS_H
 
@@ -103,9 +101,9 @@ public:
 };
 
 bool send_message(Session *client_session, const std::string payload);
-bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito);
+bool send_message(Session *session, const std::string payload, bool send_not_last_message, unsigned int not_last_message);
 bool receive_message(Session *server_session, std::string *payload);
-bool receive_message(Session *server_session, std::string *payload, bool receive_esito, unsigned int *esito);
+bool receive_message(Session *server_session, std::string *payload, bool receive_not_last_message, unsigned int *not_last_message);
 
 // USER
 bool isRegistered(std::string username);
@@ -131,6 +129,8 @@ void delete_buffers(T *buffer, Ts *...buffers);
 
 #endif
 
+// CONVERSIONS
+
 int size_t_to_int(size_t value);
 size_t int_to_size_t(int value);
 void serialize_int(int input, unsigned char *output);
@@ -144,12 +144,14 @@ void log_error(const std::string &msg);
 
 bool load_certificate(std::string filename, X509 **certificate);
 
-// ASYMMETRIC KEYS
+// ASYMMETRIC CRYPTOGRAPHY
 
 EVP_PKEY *load_public_key(const char *public_key_file);
 EVP_PKEY *load_private_key(const char *private_key_file);
 int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key);
 EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len);
+bool rsaEncrypt(const unsigned char* plaintext, int plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, int& ciphertextLength);
+EVP_PKEY* duplicate_key(EVP_PKEY* pkey);
 
 // DIGITAL SIGNATURE
 
@@ -172,9 +174,5 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
                    const unsigned char *key,
                    const unsigned char *iv,
                    unsigned char *plaintext);
-
-bool rsaEncrypt(const unsigned char* plaintext, int plaintextLength, EVP_PKEY* publicKey, unsigned char*& ciphertext, int& ciphertextLength);
-
-EVP_PKEY* duplicate_key(EVP_PKEY* pkey);
 
 #endif
