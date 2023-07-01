@@ -479,7 +479,7 @@ bool UploadServer::execute(Session *session, std::string command)
         }
         else if (!output_file)
         {
-            log_error("Errore durante la creazione del file " +  file_to_upload);
+            log_error("Errore durante la creazione del file " + file_to_upload);
             esito_string = "Errore durante la creazione del file " + file_to_upload + "";
             valido = 0;
         }
@@ -536,9 +536,14 @@ bool check_availability_to_download(std::string const &path, std::string *respon
 
     // Check file size
     std::ifstream input_file(path, std::ios::binary);
+    if (input_file.fail())
+    {
+        *response = "Error: file does not exists.";
+        return false;
+    }
     if (!input_file.is_open())
     {
-        *response = "Errore: impossibile aprire il file " + path + ".";
+        *response = "Error: impossible to open file";
         return false;
     }
     input_file.seekg(0, std::ios::end);
@@ -578,7 +583,7 @@ bool DownloadServer::execute(Session *session, std::string command)
 
     std::cout << "file_to_download: " << file_to_download.c_str() << std::endl;
 
-    std::string response_existance = "Il nome del file non rispetta i requisiti previsti, riprova\n";
+    std::string response_existance = "File name does not match requirements, try again\n";
     bool exists = std::regex_match(tokens[1], pattern) && check_availability_to_download(file_to_download, &response_existance);
     if (!send_message(session, response_existance, true, exists))
     {
@@ -606,15 +611,10 @@ bool DownloadServer::execute(Session *session, std::string command)
         }
         else
         {
-            std::cout << "File non scaricato" << std::endl;
-            if (!send_message(session, "File non scaricato\n"))
-            {
-                log_error("Failed to send message");
-                return false;
-            }
+            std::cout << "File not downloaded" << std::endl;
+            return true;
         }
     }
-
     return true;
 }
 
@@ -623,12 +623,12 @@ bool check_file_existance(std::string const &path, std::string *response)
     std::ifstream input_file(path, std::ios::binary);
     if (!input_file.is_open())
     {
-        *response = "Il file non esiste";
+        *response = "File does not exists\n";
         return false;
     }
     else
     {
-        *response = "Il file esiste, sei sicuro di volerlo eliminare? (s/n)";
+        *response = "File exists, are you sure you want to delete it? (s/n)\n";
         return true;
     }
 }
@@ -637,9 +637,9 @@ std::string delete_file(std::string const &path)
 {
     if (std::remove(path.c_str()) == 0)
     {
-        return "File eliminato con successo\n";
+        return "File deleted correctly\n";
     }
-    return "File non trovato";
+    return "File not found\n";
 }
 
 bool DeleteServer::execute(Session *session, std::string command)
@@ -665,7 +665,7 @@ bool DeleteServer::execute(Session *session, std::string command)
 
     std::string file_to_delete = "server_file/users/" + session->username + "/" + tokens[1];
 
-    std::string response_existance = "Il nome del file non rispetta i requisiti previsti, riprova\n";
+    std::string response_existance = "File name does not match requirements, try again\n";
     bool exists = std::regex_match(tokens[1], pattern) && check_file_existance(file_to_delete, &response_existance);
     if (!send_message(session, response_existance, true, exists))
     {
@@ -749,25 +749,25 @@ std::string rename_file(std::string const &old_file_name, std::string const &new
     // check esistenza file con nome oldFilePath
     if (old_file_name.empty() || new_file_name.empty())
     {
-        return "Nome file non valido";
+        return "Invalid file name";
     }
 
     if (!std::ifstream(old_file_name))
     {
-        return "File da rinominare non esistente";
+        return "File to rename does not exist";
     }
 
     // check esistenza file con nome newFilePath
     if (std::ifstream(new_file_name))
     {
-        return "Nuovo nome già presente";
+        return "New file name already exists";
     }
 
     if (rename(old_file_name.c_str(), new_file_name.c_str()) == 0)
     {
-        return "File rinominato correttamente";
+        return "File renamed correctly";
     }
-    return "Errore nella rinomina del file";
+    return "Error renaming file";
 }
 
 bool RenameServer::execute(Session *session, std::string command)

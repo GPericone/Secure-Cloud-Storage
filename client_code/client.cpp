@@ -122,6 +122,12 @@ int main(int argc, char **argv)
         auto iter = client_command_map.find(command.substr(0, command.find(' ')));
         if (iter != client_command_map.end())
         {
+            if (!iter->second->validate_command(session.get(), command))
+            {
+                log_error("Invalid command", false);
+                std::cout << "Operation completed successfully, press ENTER to continue..." << std::endl;
+                continue;
+            }
             if (!send_message(session.get(), command))
             {
                 log_error("Error in sending message", false);

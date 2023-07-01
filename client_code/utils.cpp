@@ -77,7 +77,7 @@ bool deserialize_longint(const unsigned char *buffer, long int *result)
 
 /**
  * @brief This function convert a int value to a size_t value in a safe way
- * 
+ *
  * @param value the int value to convert
  * @return size_t the converted value
  */
@@ -94,24 +94,7 @@ size_t int_to_size_t(int value)
 
 /**
  * @brief This function convert a size_t value to a int value in a safe way
- * 
- * @param value the size_t value to convert
- * @return int the converted value
- */
-int size_t_to_int(size_t value)
-{
-    if (value > static_cast<size_t>(std::numeric_limits<int>::max()))
-    {
-        log_error("Error: size_t value is too large for int", true);
-        exit(1);
-    }
-
-    return static_cast<int>(value);
-}
-
-/**
- * @brief This function convert a size_t value to a int value in a safe way
- * 
+ *
  * @param value the size_t value to convert
  * @return int the converted value
  */
@@ -128,23 +111,25 @@ int size_t_to_int(size_t value)
 
 /**
  * @brief This function convert a long int value to a int value in a safe way
- * 
+ *
  * @param value the long int value to convert
  * @return int the converted value
  */
-int longint_to_int(long int value) {
-    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+int longint_to_int(long int value)
+{
+    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max())
+    {
         log_error("Error: long int value is too large for int", true);
         exit(1);
     }
-    
+
     return static_cast<int>(value);
 }
 
 /**
  * @brief This function receive a message from a socket and store in a buffer.
  * Differently from recv function, this continue to receive data until all requested bytes have been read or an error occurs.
- * 
+ *
  * @param socket the socket to read from
  * @param buffer the buffer where the message will be stored
  * @param len the length of the message to receive
@@ -153,10 +138,10 @@ int longint_to_int(long int value) {
 bool recv_all(int socket, void *buffer, ssize_t len)
 {
     // The number of bytes remaining to be received
-    ssize_t bytes_left = len;     
-    // The number of bytes read in the current iteration                  
+    ssize_t bytes_left = len;
+    // The number of bytes read in the current iteration
     ssize_t bytes_read;
-    // A pointer to the current position in the buffer                            
+    // A pointer to the current position in the buffer
     char *buffer_ptr = static_cast<char *>(buffer);
 
     // Continue to receive data until all requested bytes have been read or an error occurs
@@ -183,7 +168,7 @@ bool recv_all(int socket, void *buffer, ssize_t len)
 
 /**
  * @brief This function delete a buffer of any type
- * 
+ *
  * @tparam T the type of the buffer
  * @param buffer the buffer to delete
  */
@@ -195,7 +180,7 @@ void deleteBuffers(T *buffer)
 
 /**
  * @brief This function delete a buffer of any type with variadic template
- * 
+ *
  * @tparam T the type of the buffer
  * @tparam Ts the types of the other buffers
  * @param buffer the buffer to delete
@@ -210,7 +195,7 @@ void deleteBuffers(T *buffer, Ts *...buffers)
 
 /**
  * @brief Get the size of a file as double value
- * 
+ *
  * @param path the path of the file
  * @return double the size of the file
  */
@@ -230,7 +215,7 @@ double get_double_file_size(std::string const &path)
 
 /**
  * @brief This function send a file to a socket
- * 
+ *
  * @param session the session to use
  * @param file_path the path of the file to send
  * @return true if the file is sent successfully, false otherwise
@@ -288,17 +273,17 @@ bool send_file(Session *session, std::string const &file_path)
     // Receive the response from the server
     if (!receive_message(session, &response, true, &esito))
     {
-        std::cerr << "Error during the reception of the result of the download of the file " << file_path << std::endl;
+        log_error("Error during the reception of the result of the transfer of the file", true);
         return false;
     }
     if (esito == 0)
     {
-        std::cerr << "Error during the download of the file " << file_path << std::endl;
+        log_error("Error during the transfer of the file", true);
         return false;
     }
     else
     {
-        std::cout << "Download of the file " << file_path << " completed" << std::endl;
+        std::cout << "Transfer of the file completed" << std::endl;
         return true;
     }
 }
@@ -327,7 +312,7 @@ std::string get_file_size(std::string const &path)
 
 /**
  * @brief This function send a message
- * 
+ *
  * @param session the session to use
  * @param payload the payload of the message
  * @return true if the message is sent successfully, false otherwise
@@ -339,13 +324,13 @@ bool send_message(Session *session, const std::string payload)
 
 /**
  * @brief This function send a message
- * 
+ *
  * @param session the session to use
  * @param payload the payload of the message
- * @param send_esito 
- * @param esito 
+ * @param send_esito
+ * @param esito
  * @return true if the message is sent successfully, false otherwise
- */ 
+ */
 bool send_message(Session *session, const std::string payload, bool send_esito, unsigned int esito)
 {
     // The size of AAD depends if we need to send the esito or not
@@ -422,7 +407,7 @@ bool send_message(Session *session, const std::string payload, bool send_esito, 
 
 /**
  * @brief This function receive a message
- * 
+ *
  * @param session the session to use
  * @param payload the payload of the message
  * @return true if the message is received successfully, false otherwise
@@ -434,11 +419,11 @@ bool receive_message(Session *session, std::string *payload)
 
 /**
  * @brief This function receive a message
- * 
+ *
  * @param session the session to use
  * @param payload the payload of the message
- * @param receive_esito 
- * @param esito 
+ * @param receive_esito
+ * @param esito
  * @return true if the message is received successfully, false otherwise
  */
 bool receive_message(Session *session, std::string *payload, bool receive_esito, unsigned int *esito)
@@ -549,9 +534,14 @@ bool check_availability_to_upload(std::string const &path, std::string *response
     // Check file size
     std::ifstream input_file(path, std::ios::binary);
     // check file existance
+    if (input_file.fail())
+    {
+        *response = "Error: file does not exists.";
+        return false;
+    }
     if (!input_file.is_open())
     {
-        *response = "Errore: impossibile aprire il file " + path + ".";
+        *response = "Error: impossible to open file";
         return false;
     }
     input_file.seekg(0, std::ios::end);
@@ -559,13 +549,39 @@ bool check_availability_to_upload(std::string const &path, std::string *response
     input_file.seekg(0, std::ios::beg);
     if (file_size > UINT32_MAX)
     {
-        *response = "Errore: il file " + path + " supera i 4 GB di dimensione.";
+        *response = "Error: file too big.";
         input_file.close();
         return false;
     }
     // response prende la dimensione del file
     input_file.close();
-    *response = get_file_size_no_ext(path);
+    return true;
+}
+
+bool UploadClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 2)
+    {
+        printf("Command needs 1 parameter, name of the file to upload, try again\n");
+        return false;
+    }
+
+    std::string response;
+    if (!check_availability_to_upload("client_file/users/" + session->username + "/" + tokens[1], &response))
+    {
+        printf("%s\n", response.c_str());
+        return false;
+    }
+
     return true;
 }
 
@@ -579,44 +595,53 @@ bool UploadClient::execute(Session *session, std::string command)
         tokens.push_back(token);
     }
 
-    if (tokens.size() != 2)
-    {
-        printf("Il comando richiede 1 parametro, nome del file da caricare, riprova\n");
-        return true;
-    }
-
     std::string file_to_upload = "client_file/users/" + session->username + "/" + tokens[1];
 
-    std::string response_existance;
-    bool check_file = check_availability_to_upload(file_to_upload, &response_existance);
-    if (!send_message(session, response_existance, true, check_file))
+    if (!send_message(session, get_file_size_no_ext(file_to_upload), true, true))
     {
         log_error("Error sending message", false);
         return false;
     }
 
-    if (check_file)
+    std::string response;
+    unsigned int success;
+    if (!receive_message(session, &response, true, &success))
     {
-        std::string response;
-        unsigned int success;
-        if (!receive_message(session, &response, true, &success))
+        log_error("Error receiving message", false);
+        return false;
+    }
+
+    if (success == 1)
+    {
+        if (!send_file(session, file_to_upload.c_str()))
         {
-            log_error("Error receiving message", false);
+            log_error("Error sending file", false);
             return false;
         }
+    }
+    else
+    {
+        printf("File non caricato %s\n", response.c_str());
+    }
 
-        if (success == 1)
-        {
-            if (!send_file(session, file_to_upload.c_str()))
-            {
-                log_error("Error sending file", false);
-                return false;
-            }
-        }
-        else
-        {
-            printf("File non caricato %s\n", response.c_str());
-        }
+    return true;
+}
+
+bool DownloadClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 2)
+    {
+        printf("Command needs 1 parameter, name of the file to download, try again\n");
+        return false;
     }
 
     return true;
@@ -630,12 +655,6 @@ bool DownloadClient::execute(Session *session, std::string command)
     while (std::getline(iss, token, ' '))
     {
         tokens.push_back(token);
-    }
-
-    if (tokens.size() != 2)
-    {
-        printf("Il comando richiede 1 parametro, nome del file da scaricare, riprova\n");
-        return true;
     }
 
     std::string response_existance;
@@ -656,17 +675,20 @@ bool DownloadClient::execute(Session *session, std::string command)
         std::string esito;
         std::cin >> esito;
 
-        std::string response;
         if (!send_message(session, esito))
         {
             log_error("Error sending message", false);
             return false;
         }
 
+        if (esito != "s") {
+            return true;
+        }
+
         std::ofstream output_file(file_to_download, std::ios::binary);
         if (!output_file)
         {
-            std::cerr << "Errore durante la creazione del file " << file_to_download << std::endl;
+            log_error("Error during creation of file ", false);
             return false;
         }
 
@@ -677,7 +699,7 @@ bool DownloadClient::execute(Session *session, std::string command)
             unsigned int esito_receive;
             if (!receive_message(session, &buffer, true, &esito_receive))
             {
-                std::cerr << "Errore durante la ricezione del file " << file_to_download << std::endl;
+                log_error("Error during receiving file ", false);
                 break;
             }
             is_last = esito_receive == 0;
@@ -694,11 +716,31 @@ bool DownloadClient::execute(Session *session, std::string command)
         return true;
     }
 
-    if (!send_message(session, "File scaricato correttamente\n", true, 1))
+    if (!send_message(session, "File download correctly\n", true, 1))
     {
         log_error("Error sending message", false);
         return false;
     }
+    return true;
+}
+
+bool DeleteClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 2)
+    {
+        printf("Command needs 1 parameter, name of the file to delete, try again\n");
+        return false;
+    }
+
     return true;
 }
 
@@ -744,6 +786,26 @@ bool DeleteClient::execute(Session *session, std::string command)
     }
 }
 
+bool ListClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 1)
+    {
+        printf("Command does not needs parameters, try again\n");
+        return false;
+    }
+
+    return true;
+}
+
 bool ListClient::execute(Session *session, std::string command)
 {
     std::string response;
@@ -753,6 +815,26 @@ bool ListClient::execute(Session *session, std::string command)
         return false;
     }
     printf("%s\n", response.c_str());
+    return true;
+}
+
+bool RenameClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 3)
+    {
+        printf("Command needs 2 parameter, name of the file to rename and new name, try again\n");
+        return false;
+    }
+
     return true;
 }
 
@@ -766,6 +848,26 @@ bool RenameClient::execute(Session *session, std::string command)
         return false;
     }
     printf("%s\n", response.c_str());
+    return true;
+}
+
+bool LogoutClient::validate_command(Session *session, const std::string command)
+{
+
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    if (tokens.size() != 1)
+    {
+        printf("Command does not needs parameters, try again\n");
+        return false;
+    }
+
     return true;
 }
 
