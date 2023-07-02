@@ -753,7 +753,7 @@ bool check_file_existance(std::string const &path, std::string *response)
     }
     else
     {
-        *response = "File exists, are you sure you want to delete it? (/n)\n";
+        *response = "File exists, are you sure you want to delete it? (y/n)";
         return true;
     }
 }
@@ -820,7 +820,7 @@ bool DeleteServer::execute(Session *session, std::string command)
             return false;
         }
 
-        if (response == "")
+        if (response == "y")
         {
             if (!send_message(session, delete_file(file_to_delete)))
             {
