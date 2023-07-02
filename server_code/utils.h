@@ -40,7 +40,7 @@ const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
 const int IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const std::string USERNAMES_FILE = "users.csv";
-const std::regex pattern("[A-Za-z0-9_. -]+");
+const std::regex pattern("^[a-zA-Z0-9_ -]+(?:\\.[a-zA-Z0-9]+)?$");
 
 // SESSION STRUCT
 struct Session

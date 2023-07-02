@@ -531,15 +531,14 @@ bool receive_message(Session *session, std::string *payload, bool receive_not_la
 }
 
 /**
- * @brief This function checks if the file is available to upload. 
- * 
+ * @brief This function checks if the file is available to upload.
+ *
  * @param path the path of the file to upload
  * @param response indicates if the file is available to upload
  * @return true if the file is available to upload, false otherwise
  */
 bool check_availability_to_upload(std::string const &path, std::string *response)
 {
-
     // Check file size
     std::ifstream input_file(path, std::ios::binary);
     // check file existance
@@ -568,7 +567,7 @@ bool check_availability_to_upload(std::string const &path, std::string *response
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise
@@ -587,6 +586,12 @@ bool UploadClient::validate_command(Session *session, const std::string command)
     if (tokens.size() != 2)
     {
         printf("Command needs 1 parameter, name of the file to upload, try again\n");
+        return false;
+    }
+
+    if (!std::regex_match(tokens[1], pattern))
+    {
+        log_error("Error: invalid file name", false);
         return false;
     }
 
@@ -644,7 +649,7 @@ bool UploadClient::execute(Session *session, std::string command)
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise
@@ -662,6 +667,12 @@ bool DownloadClient::validate_command(Session *session, const std::string comman
     if (tokens.size() != 2)
     {
         printf("Command needs 1 parameter, name of the file to download, try again\n");
+        return false;
+    }
+
+    if (!std::regex_match(tokens[1], pattern))
+    {
+        log_error("Error: invalid file name", false);
         return false;
     }
 
@@ -703,7 +714,8 @@ bool DownloadClient::execute(Session *session, std::string command)
         }
 
         // if the user doesn't want to download the file, return
-        if (user_answer != "y") {
+        if (user_answer != "y")
+        {
             return true;
         }
 
@@ -746,7 +758,7 @@ bool DownloadClient::execute(Session *session, std::string command)
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise
@@ -768,12 +780,19 @@ bool DeleteClient::validate_command(Session *session, const std::string command)
         return false;
     }
 
+
+    if (!std::regex_match(tokens[1], pattern))
+    {
+        log_error("Error: invalid file name", false);
+        return false;
+    }
+
     return true;
 }
 
 /**
  * @brief This function ask the server to delete a file.
- * 
+ *
  * @param session the session of the client
  * @param command the command to execute
  * @return true if the command is executed correctly, false otherwise
@@ -822,7 +841,7 @@ bool DeleteClient::execute(Session *session, std::string command)
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise
@@ -849,7 +868,7 @@ bool ListClient::validate_command(Session *session, const std::string command)
 
 /**
  * @brief This function ask the server to list all the files of the user.
- * 
+ *
  * @param session the session of the client
  * @param command the command to execute
  * @return true if the command is executed correctly, false otherwise
@@ -868,7 +887,7 @@ bool ListClient::execute(Session *session, std::string command)
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise
@@ -890,12 +909,19 @@ bool RenameClient::validate_command(Session *session, const std::string command)
         return false;
     }
 
+
+    if (!std::regex_match(tokens[1], pattern) || !std::regex_match(tokens[2], pattern))
+    {
+        log_error("Error: invalid file name", false);
+        return false;
+    }
+
     return true;
 }
 
 /**
  * @brief This function ask the server to rename a file.
- * 
+ *
  * @param session the session of the client
  * @param command the command to execute
  * @return true if the command is executed correctly, false otherwise
@@ -915,7 +941,7 @@ bool RenameClient::execute(Session *session, std::string command)
 
 /**
  * @brief This function checks if the command syntax is valid.
- * 
+ *
  * @param session the session of the client
  * @param command the command to validate
  * @return true if the command is valid, false otherwise

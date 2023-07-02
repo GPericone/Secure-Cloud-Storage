@@ -629,7 +629,7 @@ bool UploadServer::execute(Session *session, std::string command)
         return true;
     }
 
-    if (!send_message(session, "File downloaded successfully\n", true, 1))
+    if (!send_message(session, "File uploaded successfully\n", true, 1))
     {
         log_error("Failed to send message");
         return false;

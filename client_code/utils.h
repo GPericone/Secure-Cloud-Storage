@@ -37,6 +37,7 @@ const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
 const int IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const size_t USERNAMESIZE = 25;
+const std::regex pattern("^[a-zA-Z0-9_ -]+(?:\\.[a-zA-Z0-9]+)?$");
 
 const std::string instruction = "The communication is secure, now you can execute the following operations:\n\n"
                                 "- upload: to upload a file from your computer to the server, use the command 'upload' followed by the name of the file you want to upload. The server will save the file with the name specified by you. If this is not possible, the file will not be uploaded. The size limit for the uploaded file is 4GB.\n"
