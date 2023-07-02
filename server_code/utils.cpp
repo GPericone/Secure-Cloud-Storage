@@ -541,7 +541,7 @@ bool UploadServer::execute(Session *session, std::string command)
 
     if (tokens.size() != 2)
     {
-        std::cerr << " The command received requires 1 parameter, file name to upload, try again" << std::endl;
+        log_error("The command received requires 1 parameter, file name to upload, try again");
         if (!send_message(session, "The command received requires 1 parameter, file name to upload, try again\n"))
         {
             log_error("Failed to send message");

@@ -16,13 +16,13 @@ bool load_certificate(std::string filename, X509 **certificate)
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
-        std::cerr << "An error occurred while opening the file" << std::endl;
+        log_error("An error occurred while opening the file", true);
         return false;
     }
     *certificate = PEM_read_X509(fp, nullptr, nullptr, nullptr);
     if (!certificate)
     {
-        std::cerr << "An error occurred while reading the certificate" << std::endl;
+        log_error("An error occurred while reading the certificate", true);
         fclose(fp);
         return false;
     }
@@ -42,13 +42,13 @@ bool load_crl(std::string filename, X509_CRL **crl)
     FILE *fp = fopen(filename.c_str(), "r");
     if (!fp)
     {
-        std::cerr << "An error occurred while opening the file" << std::endl;
+        log_error("An error occurred while opening the file", true);
         return false;
     }
     *crl = PEM_read_X509_CRL(fp, nullptr, nullptr, nullptr);
     if (!crl)
     {
-        std::cerr << "An error occurred while reading the CRL" << std::endl;
+        log_error("An error occurred while reading the CRL", true);
         fclose(fp);
         return false;
     }
@@ -70,28 +70,28 @@ bool create_store(X509_STORE **store, X509 *CA_certificate, X509_CRL *crl)
     *store = X509_STORE_new();
     if (store == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the store" << std::endl;
+        log_error("An error occurred during the creation of the store", true);
         return false;
     }
 
     // Add the CA certificate to the store
     if (X509_STORE_add_cert(*store, CA_certificate) != 1)
     {
-        std::cerr << "An error occurred during the addition of certificate" << std::endl;
+        log_error("An error occurred during the addition of certificate", true);
         return false;
     }
 
     // Add the CRL to the store
     if (X509_STORE_add_crl(*store, crl) != 1)
     {
-        std::cerr << "An error occurred during the addition of CRL" << std::endl;
+        log_error("An error occurred during the addition of CRL", true);
         return false;
     }
 
     // Configure the store to perform CRL checking for every valid certificate before returning the result
     if (X509_STORE_set_flags(*store, X509_V_FLAG_CRL_CHECK) != 1)
     {
-        std::cerr << "An error occurred while configuring the store flags" << std::endl;
+        log_error("An error occurred while configuring the store flags", true);
         return false;
     }
 
@@ -111,7 +111,7 @@ bool verify_certificate(X509_STORE *store, X509 *certificate)
     X509_STORE_CTX *certificate_ctx = X509_STORE_CTX_new();
     if (certificate_ctx == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the store context" << std::endl;
+        log_error("An error occurred during the creation of the store context", true);
         X509_STORE_CTX_free(certificate_ctx);
         return false;
     }
@@ -119,7 +119,7 @@ bool verify_certificate(X509_STORE *store, X509 *certificate)
     // Initialize the context for certificate verification.
     if (X509_STORE_CTX_init(certificate_ctx, store, certificate, nullptr) != 1)
     {
-        std::cerr << "An error occurred during initialization of the store context" << std::endl;
+        log_error("An error occurred during initialization of the store context", true);
         X509_STORE_CTX_free(certificate_ctx);
         return false;
     }
@@ -128,14 +128,14 @@ bool verify_certificate(X509_STORE *store, X509 *certificate)
     int verification_result = X509_verify_cert(certificate_ctx);
     if (verification_result < 0)
     {
-        std::cerr << "An error occurred during the verification of the certificate" << std::endl;
+        log_error("An error occurred during the verification of the certificate", true);
         X509_STORE_CTX_free(certificate_ctx);
         return false;
     }
     else if (verification_result == 0)
     {
         X509_STORE_CTX_free(certificate_ctx);
-        std::cerr << "The certificate cannot be verified" << std::endl;
+        log_error("The certificate cannot be verified", true);
         return false;
     }
 
@@ -323,14 +323,14 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
     BIO *bio = BIO_new(BIO_s_mem());
     if (!bio)
     {
-        std::cerr << "Error during BIO creation" << std::endl;
+        log_error("Error during BIO creation", true);
         return -1;
     }
 
     // Write the public key to the BIO
     if (!PEM_write_bio_PUBKEY(bio, public_key))
     {
-        std::cerr << "Error during PEM_write_bio_PUBKEY" << std::endl;
+        log_error("Error during PEM_write_bio_PUBKEY", true);
         BIO_free_all(bio);
         return -1;
     }
@@ -340,7 +340,7 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
     *serialized_key = new unsigned char[key_len];
     if (BIO_read(bio, *serialized_key, key_len) != key_len)
     {
-        std::cerr << "Error during BIO_read" << std::endl;
+        log_error("Error during BIO_read", true);
         BIO_free_all(bio);
         delete[] *serialized_key;
         return -1;
@@ -348,6 +348,62 @@ int serialize_public_key(EVP_PKEY *public_key, unsigned char **serialized_key)
 
     BIO_free_all(bio);
     return key_len;
+}
+
+/**
+ * @brief Decrypt a ciphertext using RSA
+ * 
+ * @param ciphertext the ciphertext to decrypt
+ * @param ciphertextLength the length of the ciphertext
+ * @param privateKey the private key to use for decryption
+ * @param plaintext the buffer where to store the plaintext
+ * @param plaintextLength the length of the plaintext
+ * @return true if the decryption was successful, false otherwise
+ */
+bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, int &plaintextLength)
+{
+    RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
+    if (!rsaKey)
+    {
+        log_error("Error getting RSA key from EVP_PKEY.", true);
+        return false;
+    }
+
+    plaintext = new unsigned char[RSA_size(rsaKey)];
+
+    plaintextLength = RSA_private_decrypt(size_t_to_int(ciphertextLength), ciphertext, plaintext, rsaKey, RSA_PKCS1_OAEP_PADDING);
+    if (plaintextLength == -1)
+    {
+        log_error("Error decrypting with RSA.", true);
+        ERR_print_errors_fp(stderr);
+        RSA_free(rsaKey);
+        return false;
+    }
+
+    RSA_free(rsaKey);
+
+    return true;
+}
+
+/**
+ * @brief The function for duplicate a RSA key
+ * 
+ * @param pkey the key to duplicate
+ * @param is_private true if the key is private, false otherwise
+ * @return EVP_PKEY* the duplicated key
+ */
+EVP_PKEY *duplicate_key(EVP_PKEY *pkey, bool is_private)
+{
+    EVP_PKEY *pDupKey = EVP_PKEY_new();
+    RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
+    RSA *pRSADupKey;
+
+    pRSADupKey = (is_private==true) ? RSAPrivateKey_dup(pRSA) : RSAPublicKey_dup(pRSA);
+
+    RSA_free(pRSA);
+    EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
+    RSA_free(pRSADupKey);
+    return pDupKey;
 }
 
 // --------------------------------------------------------------------------
@@ -492,27 +548,26 @@ int aesgcm_encrypt(const unsigned char *plaintext,
 
     if (ctx == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        log_error("An error occurred during the creation of the context", true);
         return -1;
     }
 
     // Initialise the encryption operation.
     if (1 != EVP_EncryptInit(ctx, cipher, key, iv))
     {
-        std::cerr << "An error occurred during the initialization of the encryption" << std::endl;
-        return -1;
+        log_error("An error occurred during the initialization of the encryption", true);
     }
 
     // Provide any AAD data. This can be called zero or more times as required
     if (1 != EVP_EncryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
-        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        log_error("An error occurred during the provision of AAD data", true);
         return -1;
     }
 
     if (1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
     {
-        std::cerr << "An error occurred during the update of the encryption" << std::endl;
+        log_error("An error occurred during the update of the encryption", true);
         return -1;
     }
 
@@ -521,7 +576,7 @@ int aesgcm_encrypt(const unsigned char *plaintext,
     // Finalize Encryption
     if (1 != EVP_EncryptFinal(ctx, ciphertext + len, &len))
     {
-        std::cerr << "An error occurred during the finalization of the encryption" << std::endl;
+        log_error("An error occurred during the finalization of the encryption", true);
         return -1;
     }
 
@@ -530,7 +585,7 @@ int aesgcm_encrypt(const unsigned char *plaintext,
     // Get the tag
     if (1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag))
     {
-        std::cerr << "An error occurred while getting the tag" << std::endl;
+        log_error("An error occurred while getting the tag", true);
         return -1;
     }
 
@@ -569,28 +624,27 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
 
     if (ctx == nullptr)
     {
-        std::cerr << "An error occurred during the creation of the context" << std::endl;
+        log_error("An error occurred during the creation of the context", true);
         return -1;
     }
 
     if (!EVP_DecryptInit(ctx, cipher, key, iv))
     {
-        std::cerr << "An error occurred during the initialization of the decryption" << std::endl;
+        log_error("An error occurred during the initialization of the decryption", true);
         return -1;
     }
 
     // Provide any AAD data.
     if (!EVP_DecryptUpdate(ctx, nullptr, &len, aad, aad_len))
     {
-        std::cerr << "An error occurred during the provision of AAD data" << std::endl;
+        log_error("An error occurred during the provision of AAD data", true);
         return -1;
     }
 
     // Provide the message to be decrypted, and obtain the plaintext output.
     if (!EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
     {
-        std::cerr << "An error occurred during the update of the decryption" << std::endl;
-        return -1;
+        log_error("An error occurred during the update of the decryption", true);
     }
 
     plaintext_len = len;
@@ -598,7 +652,7 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
     /* Set expected tag value. */
     if (!EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, tag))
     {
-        std::cerr << "An error occurred while getting the tag" << std::endl;
+        log_error("An error occurred while getting the tag", true);
         return -1;
     }
     /*
@@ -621,60 +675,4 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
         /* Verify failed */
         return -1;
     }
-}
-
-/**
- * @brief Decrypt a ciphertext using RSA
- * 
- * @param ciphertext the ciphertext to decrypt
- * @param ciphertextLength the length of the ciphertext
- * @param privateKey the private key to use for decryption
- * @param plaintext the buffer where to store the plaintext
- * @param plaintextLength the length of the plaintext
- * @return true if the decryption was successful, false otherwise
- */
-bool rsaDecrypt(const unsigned char *ciphertext, size_t ciphertextLength, EVP_PKEY *privateKey, unsigned char *&plaintext, int &plaintextLength)
-{
-    RSA *rsaKey = EVP_PKEY_get1_RSA(privateKey);
-    if (!rsaKey)
-    {
-        log_error("Error getting RSA key from EVP_PKEY.", true);
-        return false;
-    }
-
-    plaintext = new unsigned char[RSA_size(rsaKey)];
-
-    plaintextLength = RSA_private_decrypt(size_t_to_int(ciphertextLength), ciphertext, plaintext, rsaKey, RSA_PKCS1_OAEP_PADDING);
-    if (plaintextLength == -1)
-    {
-        log_error("Error decrypting with RSA.", true);
-        ERR_print_errors_fp(stderr);
-        RSA_free(rsaKey);
-        return false;
-    }
-
-    RSA_free(rsaKey);
-
-    return true;
-}
-
-/**
- * @brief The function for duplicate a RSA key
- * 
- * @param pkey the key to duplicate
- * @param is_private true if the key is private, false otherwise
- * @return EVP_PKEY* the duplicated key
- */
-EVP_PKEY *duplicate_key(EVP_PKEY *pkey, bool is_private)
-{
-    EVP_PKEY *pDupKey = EVP_PKEY_new();
-    RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
-    RSA *pRSADupKey;
-
-    pRSADupKey = (is_private==true) ? RSAPrivateKey_dup(pRSA) : RSAPublicKey_dup(pRSA);
-
-    RSA_free(pRSA);
-    EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
-    RSA_free(pRSADupKey);
-    return pDupKey;
 }

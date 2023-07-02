@@ -174,6 +174,61 @@ EVP_PKEY *deserialize_public_key(unsigned char *serialized_key, int key_len)
     return public_key;
 }
 
+/**
+ * @brief The function encrypts the plaintext using the RSA public key and returns the ciphertext.
+ * 
+ * @param plaintext the plaintext to encrypt
+ * @param plaintextLength the length of the plaintext
+ * @param publicKey the public key to use for encryption
+ * @param ciphertext the buffer where to store the ciphertext
+ * @param ciphertextLength the length of the ciphertext
+ * @return true if the encryption was successful, false otherwise
+ */
+bool rsaEncrypt(const unsigned char *plaintext, int plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, int &ciphertextLength)
+{
+    RSA *rsaKey = EVP_PKEY_get1_RSA(publicKey);
+    if (!rsaKey)
+    {
+        log_error("Error extracting RSA key from EVP_PKEY.");
+        return false;
+    }
+
+    ciphertext = new unsigned char[RSA_size(rsaKey)];
+
+    ciphertextLength = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_OAEP_PADDING);
+    if (ciphertextLength == -1)
+    {
+        log_error("Error encrypting with RSA.");
+        ERR_print_errors_fp(stderr);
+        RSA_free(rsaKey);
+        return false;
+    }
+
+    RSA_free(rsaKey);
+
+    return true;
+}
+
+/**
+ * @brief The function for duplicate a RSA key
+ * 
+ * @param pkey the key to duplicate
+ * @param is_private true if the key is private, false otherwise
+ * @return EVP_PKEY* the duplicated key
+ */
+EVP_PKEY *duplicate_key(EVP_PKEY *pkey)
+{
+    EVP_PKEY *pDupKey = EVP_PKEY_new();
+    RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
+    RSA *pRSADupKey;
+    pRSADupKey = RSAPublicKey_dup(pRSA);
+
+    RSA_free(pRSA);
+    EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
+    RSA_free(pRSADupKey);
+    return pDupKey;
+}
+
 // --------------------------------------------------------------------------
 // DIGITAL SIGNATURE
 // --------------------------------------------------------------------------
@@ -453,59 +508,4 @@ int aesgcm_decrypt(const unsigned char *ciphertext, int ciphertext_len,
         /* Verify failed */
         return -1;
     }
-}
-
-/**
- * @brief The function encrypts the plaintext using the RSA public key and returns the ciphertext.
- * 
- * @param plaintext the plaintext to encrypt
- * @param plaintextLength the length of the plaintext
- * @param publicKey the public key to use for encryption
- * @param ciphertext the buffer where to store the ciphertext
- * @param ciphertextLength the length of the ciphertext
- * @return true if the encryption was successful, false otherwise
- */
-bool rsaEncrypt(const unsigned char *plaintext, int plaintextLength, EVP_PKEY *publicKey, unsigned char *&ciphertext, int &ciphertextLength)
-{
-    RSA *rsaKey = EVP_PKEY_get1_RSA(publicKey);
-    if (!rsaKey)
-    {
-        log_error("Error extracting RSA key from EVP_PKEY.");
-        return false;
-    }
-
-    ciphertext = new unsigned char[RSA_size(rsaKey)];
-
-    ciphertextLength = RSA_public_encrypt(plaintextLength, plaintext, ciphertext, rsaKey, RSA_PKCS1_OAEP_PADDING);
-    if (ciphertextLength == -1)
-    {
-        log_error("Error encrypting with RSA.");
-        ERR_print_errors_fp(stderr);
-        RSA_free(rsaKey);
-        return false;
-    }
-
-    RSA_free(rsaKey);
-
-    return true;
-}
-
-/**
- * @brief The function for duplicate a RSA key
- * 
- * @param pkey the key to duplicate
- * @param is_private true if the key is private, false otherwise
- * @return EVP_PKEY* the duplicated key
- */
-EVP_PKEY *duplicate_key(EVP_PKEY *pkey)
-{
-    EVP_PKEY *pDupKey = EVP_PKEY_new();
-    RSA *pRSA = EVP_PKEY_get1_RSA(pkey);
-    RSA *pRSADupKey;
-    pRSADupKey = RSAPublicKey_dup(pRSA);
-
-    RSA_free(pRSA);
-    EVP_PKEY_set1_RSA(pDupKey, pRSADupKey);
-    RSA_free(pRSADupKey);
-    return pDupKey;
 }

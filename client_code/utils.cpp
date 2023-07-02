@@ -257,7 +257,7 @@ bool send_file(Session *session, std::string const &file_path)
         // Send the chunk
         if (!send_message(session, std::string(buffer.begin(), buffer.end()), true, not_last_message))
         {
-            std::cerr << "Error during the sending of the file " << file_path << std::endl;
+            log_error("Error during the sending of the file", false);
             input_file.close();
             return false;
         }

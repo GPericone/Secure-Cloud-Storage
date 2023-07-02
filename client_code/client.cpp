@@ -140,7 +140,7 @@ int main(int argc, char **argv)
         }
         else
         {
-            std::cerr << "Command not recognized" << std::endl;
+            log_error("Command not recognized", false);
         }
         std::cout << "Operation completed successfully, press ENTER to continue..." << std::endl;
     }

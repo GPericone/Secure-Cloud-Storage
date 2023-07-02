@@ -38,9 +38,11 @@ const int CHUNK_SIZE = 1000000;
 const size_t MAX_PATH = 512;
 const size_t NONCE_LEN = 16;
 const size_t TAG_LEN = 16;
+const size_t USERNAMESIZE = 25;
 const int IV_LEN = EVP_CIPHER_iv_length(EVP_aes_256_gcm());
 const std::string USERNAMES_FILE = "users.csv";
 const std::regex pattern("^[a-zA-Z0-9_ -]+(?:\\.[a-zA-Z0-9]+)?$");
+const std::regex username_pattern("[A-Za-z]+");
 
 // SESSION STRUCT
 struct Session

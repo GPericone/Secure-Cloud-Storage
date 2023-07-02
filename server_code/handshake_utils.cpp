@@ -74,6 +74,14 @@ bool receive_message2(Session *server_session)
     // Convert username from unsigned char to string
     auto username_str = std::string(reinterpret_cast<char *>(username), user_len);
 
+    // Check if the username is valid
+    if (username_str.empty() || username_str.size() > USERNAMESIZE || !std::regex_match(username_str, username_pattern))
+    {
+        log_error("Invalid username");
+        delete_buffers(nonce, username_len_byte, username);
+        return false;
+    }
+
     // Check if the user is registered
     if (!isRegistered(username_str))
     {
