@@ -22,9 +22,6 @@ bool receive_message1(Session *client_session)
     // Copy the server's nonce into the client's session
     memcpy(client_session->nonceServer, nonceS, NONCE_LEN);
 
-    // Print a message indicating that the nonce has been received
-    printf("Nonce received from server\n");
-
     // Return true to indicate that the operation was successful
     return true;
 }
